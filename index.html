@@ -15,95 +15,73 @@
 <body class="bg-slate-100 text-slate-800 h-screen flex flex-col overflow-hidden">
 
   <!-- 상단 헤더 -->
-  <header class="bg-slate-900 text-white px-6 py-3.5 flex items-center justify-between shadow-md shrink-0">
+  <header class="bg-slate-900 text-white px-6 py-3.5 flex flex-wrap items-center justify-between gap-3 shadow-md shrink-0">
     <div class="flex items-center gap-3">
-      <span class="bg-blue-600 text-xs font-bold px-2.5 py-1 rounded">GNU HWPX ENGINE</span>
-      <h1 class="text-lg font-bold tracking-tight">공문서 HWPX 자동 조립기</h1>
-      <span class="text-xs text-slate-400 hidden sm:inline">| 제목: 굴림체 14pt(100%/0%) · 본문: 돋움 12pt(95%/-5%) · 양쪽정렬</span>
+      <span class="bg-blue-600 text-xs font-bold px-2.5 py-1 rounded">GNU HWPX</span>
+      <h1 class="text-lg font-bold tracking-tight">공문서 자동 생성기</h1>
+      <span id="templateBadge" class="text-xs px-2.5 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
+        ⏳ 기본 템플릿(template.hwpx) 불러오는 중...
+      </span>
     </div>
-    <button onclick="copyAIPrompt()" class="bg-slate-700 hover:bg-slate-600 text-xs font-medium px-3.5 py-2 rounded-lg border border-slate-600 transition flex items-center gap-1.5">
-      <span>📋 AI 초안용 MD 프롬프트 복사</span>
-    </button>
+
+    <div class="flex items-center gap-2">
+      <label class="bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium px-3 py-2 rounded-lg border border-slate-700 cursor-pointer transition">
+        <span>📂 다른 양식 임시 사용</span>
+        <input type="file" id="hwpxInput" accept=".hwpx" class="hidden" onchange="handleManualHwpxUpload(event)" />
+      </label>
+      <button onclick="copyAIPrompt()" class="bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-3.5 py-2 rounded-lg shadow-xs transition flex items-center gap-1.5">
+        <span>📋 AI 초안용 MD 프롬프트 복사</span>
+      </button>
+    </div>
   </header>
 
-  <!-- 메인 3단 워크스페이스 -->
+  <!-- 메인 2단 워크스페이스 -->
   <main class="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-4 p-4 overflow-hidden">
 
-    <!-- [좌측 3컬럼] 1. 템플릿 관리 -->
-    <section class="lg:col-span-3 bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col overflow-hidden">
-      <div class="p-4 border-b border-slate-100 bg-slate-50/70">
-        <h2 class="font-bold text-sm text-slate-700">1. HWPX 마스터 템플릿</h2>
-        <p class="text-xs text-slate-500 mt-0.5">치환자가 포함된 기관 표준 양식</p>
-      </div>
-      
-      <div class="p-4 flex-1 flex flex-col gap-4 overflow-y-auto">
-        <div id="templateStatusBox" class="p-3.5 rounded-lg border border-amber-200 bg-amber-50 text-amber-800 text-xs">
-          등록된 템플릿이 없습니다. 1단계에서 만든 <b>.hwpx</b> 파일을 올려주세요.
-        </div>
-
-        <label class="border-2 border-dashed border-slate-300 hover:border-blue-500 rounded-xl p-5 text-center cursor-pointer transition bg-slate-50 hover:bg-blue-50/40">
-          <input type="file" id="hwpxInput" accept=".hwpx" class="hidden" onchange="handleHwpxUpload(event)" />
-          <div class="text-2xl mb-1">📄</div>
-          <div class="text-xs font-semibold text-slate-700">HWPX 템플릿 파일 선택</div>
-          <div class="text-[11px] text-slate-400 mt-1">한 번 등록하면 브라우저에 자동 저장됨</div>
-        </label>
-
-        <div class="bg-slate-50 rounded-lg p-3 border border-slate-200/80 text-xs space-y-1.5">
-          <div class="font-semibold text-slate-700">✅ 치환자 검증 상태</div>
-          <div id="checkTitle" class="text-slate-400">• {{TITLE}} 대기중</div>
-          <div id="checkBody" class="text-slate-400">• {{BODY_CONTENT}} 대기중</div>
-          <div id="checkAttach" class="text-slate-400">• {{ATTACHMENTS}} 대기중</div>
-        </div>
-
-        <div class="bg-blue-50/60 rounded-lg p-3 border border-blue-100 text-xs space-y-2">
-          <div class="font-semibold text-slate-700">⚙️ 적용된 공문 표준 서식</div>
-          <div class="text-[11px] text-slate-600 leading-relaxed">
-            • 제목: <b>굴림체</b> 14pt 보통 (장평 <b>100%</b> / 자간 <b>0%</b>)<br>
-            • 본문: <b>돋움</b> 12pt (장평 <b>95%</b> / 자간 <b>-5%</b>)<br>
-            • 문단 설정: <b>양쪽 정렬</b> / <b>어절</b> 단위 줄나눔
-          </div>
-          <label class="flex items-center gap-2 cursor-pointer text-slate-700 pt-1 border-t border-blue-100">
-            <input type="checkbox" id="removeBottomTable" checked class="rounded text-blue-600 focus:ring-blue-500" />
-            <span>하단 결재란/시행정보 표 자동 제거</span>
-          </label>
-        </div>
-      </div>
-    </section>
-
-    <!-- [중앙 5컬럼] 2. 마크다운 초안 입력 -->
-    <section class="lg:col-span-5 bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col overflow-hidden">
+    <!-- [좌측 6컬럼] 1. 마크다운 초안 입력 / 업로드 -->
+    <section class="lg:col-span-6 bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col overflow-hidden">
       <div class="p-4 border-b border-slate-100 bg-slate-50/70 flex items-center justify-between">
         <div>
-          <h2 class="font-bold text-sm text-slate-700">2. 공문 초안 (Markdown)</h2>
-          <p class="text-xs text-slate-500 mt-0.5">.md 파일 업로드 또는 직접 붙여넣기</p>
+          <h2 class="font-bold text-sm text-slate-700">1. 공문 초안 입력 (Markdown)</h2>
+          <p class="text-xs text-slate-500 mt-0.5">.md 파일을 업로드하거나 AI가 작성한 초안을 붙여넣으세요</p>
         </div>
         <div class="flex gap-2">
-          <button onclick="loadSampleMd()" class="text-xs bg-white hover:bg-slate-100 text-slate-600 px-2.5 py-1.5 rounded border border-slate-300 transition">샘플 불러오기</button>
-          <label class="text-xs bg-blue-50 hover:bg-blue-100 text-blue-700 font-medium px-2.5 py-1.5 rounded border border-blue-200 cursor-pointer transition">
-            .md 열기
+          <button onclick="loadSampleMd()" class="text-xs bg-white hover:bg-slate-100 text-slate-600 px-2.5 py-1.5 rounded-lg border border-slate-300 transition">샘플 초기화</button>
+          <label class="text-xs bg-blue-50 hover:bg-blue-100 text-blue-700 font-semibold px-3 py-1.5 rounded-lg border border-blue-200 cursor-pointer transition flex items-center gap-1">
+            <span>📄 .md 파일 열기</span>
             <input type="file" id="mdInput" accept=".md,.txt" class="hidden" onchange="handleMdUpload(event)" />
           </label>
         </div>
       </div>
 
-      <textarea id="mdEditor" oninput="updatePreview()" placeholder="여기에 AI와 작성한 공문 마크다운 초안을 붙여넣으세요..."
-        class="flex-1 w-full p-4 text-xs font-mono leading-relaxed resize-none focus:outline-none text-slate-800 bg-white"></textarea>
+      <textarea id="mdEditor" oninput="updatePreview()" placeholder="여기에 공문 마크다운(.md) 내용을 붙여넣으세요..."
+        class="flex-1 w-full p-5 text-xs font-mono leading-relaxed resize-none focus:outline-none text-slate-800 bg-white"></textarea>
+
+      <div class="px-4 py-2.5 bg-slate-50 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-500">
+        <span>서식: 제목(굴림체 14pt, 100%/0%) · 본문(돋움 12pt, 95%/-5%, 양쪽정렬, 어절 줄나눔)</span>
+        <label class="flex items-center gap-1.5 cursor-pointer text-slate-700 font-medium">
+          <input type="checkbox" id="removeBottomTable" checked class="rounded text-blue-600 focus:ring-blue-500" />
+          <span>하단 결재란/시행정보 표 제거</span>
+        </label>
+      </div>
     </section>
 
-    <!-- [우측 4컬럼] 3. 구조 미리보기 및 다운로드 -->
-    <section class="lg:col-span-4 bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col overflow-hidden">
-      <div class="p-4 border-b border-slate-100 bg-slate-50/70">
-        <h2 class="font-bold text-sm text-slate-700">3. 공문 구조 미리보기 및 출력</h2>
-        <p class="text-xs text-slate-500 mt-0.5">전자결재 기안기용 HWPX 파일 생성</p>
+    <!-- [우측 6컬럼] 2. 실시간 미리보기 및 HWPX 다운로드 -->
+    <section class="lg:col-span-6 bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col overflow-hidden">
+      <div class="p-4 border-b border-slate-100 bg-slate-50/70 flex items-center justify-between">
+        <div>
+          <h2 class="font-bold text-sm text-slate-700">2. 공문 구조 미리보기 및 출력</h2>
+          <p class="text-xs text-slate-500 mt-0.5">브라우저 내부에서 즉시 조립되며 외부 서버로 전송되지 않습니다</p>
+        </div>
       </div>
 
-      <div id="previewArea" class="flex-1 p-5 overflow-y-auto doc-preview text-xs bg-slate-50/40 space-y-3">
-        <div class="text-slate-400 text-center mt-20">좌측에 템플릿을 올리고 중앙에 마크다운을 입력하면<br>공문 구조가 실시간으로 표시됩니다.</div>
+      <div id="previewArea" class="flex-1 p-6 overflow-y-auto doc-preview text-xs bg-slate-50/40 space-y-3">
+        <div class="text-slate-400 text-center mt-20">좌측에 마크다운 초안을 입력하면 공문 구조가 실시간으로 표시됩니다.</div>
       </div>
 
       <div class="p-4 border-t border-slate-200 bg-white">
         <button id="generateBtn" onclick="generateHWPX()" disabled
-          class="w-full py-3 px-4 rounded-xl font-bold text-sm text-white bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed shadow-sm transition flex items-center justify-center gap-2">
+          class="w-full py-3.5 px-4 rounded-xl font-bold text-sm text-white bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed shadow-sm transition flex items-center justify-center gap-2">
           <span>⬇️ 공문 HWPX 생성 및 다운로드</span>
         </button>
       </div>
@@ -113,90 +91,64 @@
 
   <script>
     let templateBuffer = null;
-    let templateFileName = '';
     const HP_NS = 'http://www.hancom.co.kr/hwpml/2011/paragraph';
     const HH_NS = 'http://www.hancom.co.kr/hwpml/2011/head';
     const HC_NS = 'http://www.hancom.co.kr/hwpml/2011/core';
 
-    // 1. IndexedDB 템플릿 저장/불러오기
-    const DB_NAME = 'GnuHwpxTemplateDB';
-    const STORE_NAME = 'templates';
-
-    function openDB() {
-      return new Promise((resolve, reject) => {
-        const req = indexedDB.open(DB_NAME, 1);
-        req.onupgradeneeded = () => req.result.createObjectStore(STORE_NAME);
-        req.onsuccess = () => resolve(req.result);
-        req.onerror = () => reject(req.error);
-      });
-    }
-
-    async function saveTemplateToDB(name, buffer) {
-      const db = await openDB();
-      const tx = db.transaction(STORE_NAME, 'readwrite');
-      tx.objectStore(STORE_NAME).put({ name, buffer }, 'master');
-    }
-
-    async function loadTemplateFromDB() {
-      const db = await openDB();
-      return new Promise((resolve) => {
-        const tx = db.transaction(STORE_NAME, 'readonly');
-        const req = tx.objectStore(STORE_NAME).get('master');
-        req.onsuccess = () => resolve(req.result);
-        req.onerror = () => resolve(null);
-      });
-    }
-
+    // 1. 페이지 로드 시 같은 폴더의 template.hwpx 자동 로드
     window.addEventListener('DOMContentLoaded', async () => {
-      const saved = await loadTemplateFromDB();
-      if (saved && saved.buffer) {
-        await validateAndSetTemplate(saved.name, saved.buffer, false);
-      }
       loadSampleMd();
+      await loadDefaultTemplate();
     });
 
-    // 2. HWPX 템플릿 검증 및 로드
-    async function handleHwpxUpload(e) {
+    async function loadDefaultTemplate() {
+      const badge = document.getElementById('templateBadge');
+      try {
+        // 캐시 방지를 위해 타임스탬프 쿼리 추가
+        const response = await fetch(`./template.hwpx?t=${Date.now()}`);
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        const buffer = await response.arrayBuffer();
+        await validateAndSetTemplate('template.hwpx (기본 양식)', buffer);
+      } catch (err) {
+        badge.className = 'text-xs px-2.5 py-1 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30';
+        badge.textContent = '⚠️ template.hwpx 자동 로드 실패 (우측 버튼으로 직접 선택 가능)';
+        console.warn('기본 템플릿 로드 실패:', err);
+      }
+    }
+
+    async function handleManualHwpxUpload(e) {
       const file = e.target.files[0];
       if (!file) return;
       const buffer = await file.arrayBuffer();
-      await validateAndSetTemplate(file.name, buffer, true);
+      await validateAndSetTemplate(`${file.name} (임시 적용)`, buffer);
     }
 
-    async function validateAndSetTemplate(name, buffer, shouldSave) {
+    async function validateAndSetTemplate(label, buffer) {
+      const badge = document.getElementById('templateBadge');
       try {
         const zip = await JSZip.loadAsync(buffer);
         const sectionFile = zip.file('Contents/section0.xml');
-        if (!sectionFile) throw new Error('Contents/section0.xml을 찾을 수 없습니다.');
+        if (!sectionFile) throw new Error('Contents/section0.xml이 없는 파일입니다.');
 
         const xmlText = await sectionFile.async('string');
-        const hasTitle = xmlText.includes('{{TITLE}}');
-        const hasBody = xmlText.includes('{{BODY_CONTENT}}');
-        const hasAttach = xmlText.includes('{{ATTACHMENTS}}');
-
-        document.getElementById('checkTitle').innerHTML = hasTitle ? '<span class="text-emerald-600 font-semibold">✔ {{TITLE}} 확인됨</span>' : '<span class="text-rose-600">✘ {{TITLE}} 누락</span>';
-        document.getElementById('checkBody').innerHTML = hasBody ? '<span class="text-emerald-600 font-semibold">✔ {{BODY_CONTENT}} 확인됨</span>' : '<span class="text-rose-600">✘ {{BODY_CONTENT}} 누락</span>';
-        document.getElementById('checkAttach').innerHTML = hasAttach ? '<span class="text-emerald-600 font-semibold">✔ {{ATTACHMENTS}} 확인됨</span>' : '<span class="text-rose-600">✘ {{ATTACHMENTS}} 누락</span>';
-
-        if (!hasTitle || !hasBody) {
-          alert('템플릿에 {{TITLE}} 또는 {{BODY_CONTENT}} 치환자가 없습니다.');
-          return;
+        if (!xmlText.includes('{{TITLE}}') || !xmlText.includes('{{BODY_CONTENT}}')) {
+          throw new Error('템플릿에 {{TITLE}} 또는 {{BODY_CONTENT}} 치환자가 없습니다.');
         }
 
         templateBuffer = buffer;
-        templateFileName = name;
-        if (shouldSave) await saveTemplateToDB(name, buffer);
-
-        const statusBox = document.getElementById('templateStatusBox');
-        statusBox.className = 'p-3.5 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-800 text-xs';
-        statusBox.innerHTML = `<b>적용 완료:</b> ${name}<br><span class="text-[11px] text-emerald-600">브라우저에 안전하게 저장되었습니다.</span>`;
+        badge.className = 'text-xs px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30';
+        badge.textContent = `✔ 양식 준비 완료: ${label}`;
         document.getElementById('generateBtn').disabled = false;
       } catch (err) {
-        alert('HWPX 파일 분석 중 오류: ' + err.message);
+        badge.className = 'text-xs px-2.5 py-1 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30';
+        badge.textContent = `✘ 양식 오류: ${err.message}`;
+        alert('템플릿 검증 오류: ' + err.message);
       }
     }
 
-    // 3. 마크다운 파일 읽기 및 파싱
+    // 2. 마크다운 파일 읽기 및 파싱
     function handleMdUpload(e) {
       const file = e.target.files[0];
       if (!file) return;
@@ -298,7 +250,7 @@
       return { title, attachments, blocks };
     }
 
-    // 4. 실시간 미리보기 렌더링
+    // 3. 실시간 미리보기 렌더링
     function updatePreview() {
       const raw = document.getElementById('mdEditor').value;
       const parsed = parseMarkdownDoc(raw);
@@ -307,10 +259,10 @@
       const formatBoldHtml = (str) => str.replace(/\*\*(.*?)\*\*/g, '<strong class="font-bold text-slate-900">$1</strong>');
 
       let html = `
-        <div class="bg-white p-4 rounded-lg border border-slate-200 shadow-xs space-y-3">
-          <div class="border-b border-slate-200 pb-2">
+        <div class="bg-white p-5 rounded-lg border border-slate-200 shadow-xs space-y-3">
+          <div class="border-b border-slate-200 pb-2.5">
             <span class="text-[11px] font-bold text-blue-600 block">제목 (굴림체 14pt · 장평 100% · 자간 0%)</span>
-            <div style="font-family: 'GulimChe', '굴림체', sans-serif;" class="font-normal text-sm text-slate-900 mt-0.5">${parsed.title}</div>
+            <div style="font-family: 'GulimChe', '굴림체', sans-serif;" class="font-normal text-sm text-slate-900 mt-1">${parsed.title}</div>
           </div>
           <div class="space-y-1.5 text-slate-800 whitespace-pre-wrap text-justify">
       `;
@@ -336,7 +288,7 @@
       html += `</div>`;
 
       if (parsed.attachments.length > 0) {
-        html += `<div class="border-t border-slate-200 pt-2 text-slate-700 whitespace-pre-wrap text-justify">`;
+        html += `<div class="border-t border-slate-200 pt-2.5 text-slate-700 whitespace-pre-wrap text-justify">`;
         parsed.attachments.forEach((att, idx) => {
           html += `<div>${idx === 0 ? '붙임  ' : '      '}${att}</div>`;
         });
@@ -347,7 +299,7 @@
       preview.innerHTML = html;
     }
 
-    // 5. XML DOM 노드 생성 및 안전 조작 헬퍼
+    // 4. XML DOM 노드 생성 및 안전 조작 헬퍼
     function createEl(doc, ns, prefix, tagName, attrs = {}, children = []) {
       const node = doc.createElementNS(ns, `${prefix}:${tagName}`);
       for (const [k, v] of Object.entries(attrs)) {
@@ -374,9 +326,8 @@
       });
     }
 
-    // header.xml에 폰트(제목: 굴림체 100%/0%, 본문: 돋움 95%/-5%), 본문 '양쪽 정렬'(JUSTIFY), '어절'(BREAK_WORD) 설정
+    // header.xml 스타일 주입: 제목(굴림체 14pt 100%/0%), 본문(돋움 12pt 95%/-5%), 양쪽정렬(JUSTIFY), 어절 줄나눔(BREAK_WORD)
     function injectCustomStyles(headerDoc) {
-      // 1) 폰트 등록 헬퍼 ("굴림체", "돋움")
       const registerFontFace = (faceName) => {
         const langFontIds = {};
         const fontfaces = Array.from(headerDoc.getElementsByTagNameNS(HH_NS, 'fontface'));
@@ -408,7 +359,6 @@
       const gulimCheFontIds = registerFontFace('굴림체');
       const dotumFontIds = registerFontFace('돋움');
 
-      // 2) charPr 생성 헬퍼
       const charProps = headerDoc.getElementsByTagNameNS(HH_NS, 'charProperties')[0];
       const existingChars = Array.from(charProps.getElementsByTagNameNS(HH_NS, 'charPr'));
       let maxCharId = 0;
@@ -465,7 +415,6 @@
       const unitCharId = createCustomCharPr(dotumFontIds, 900, false, 95, -5);         // 표단위: 돋움 9pt 일반
       charProps.setAttribute('itemCnt', String(charProps.getElementsByTagNameNS(HH_NS, 'charPr').length));
 
-      // 3) 문단 스타일(paraPr) 설정: 본문 '양쪽 정렬'(JUSTIFY) + 한글 '어절' 단위 줄 나눔(BREAK_WORD)
       const paraProps = headerDoc.getElementsByTagNameNS(HH_NS, 'paraProperties')[0];
       const existingParas = Array.from(paraProps.getElementsByTagNameNS(HH_NS, 'paraPr'));
       let maxParaId = 0;
@@ -542,7 +491,6 @@
 
       paraProps.setAttribute('itemCnt', String(paraProps.getElementsByTagNameNS(HH_NS, 'paraPr').length));
 
-      // 4) 표 테두리 스타일
       const borderFills = headerDoc.getElementsByTagNameNS(HH_NS, 'borderFills')[0];
       const existingBfs = Array.from(borderFills.getElementsByTagNameNS(HH_NS, 'borderFill'));
       let maxBfId = 0;
@@ -681,10 +629,10 @@
       return resultNodes;
     }
 
-    // 6. 최종 HWPX 생성
+    // 5. 최종 HWPX 생성
     async function generateHWPX() {
       if (!templateBuffer) {
-        alert('먼저 좌측에서 HWPX 템플릿 파일을 등록해 주세요.');
+        alert('기본 템플릿이 로드되지 않았습니다. GitHub 저장소에 template.hwpx 파일이 있는지 확인해 주세요.');
         return;
       }
 
@@ -714,7 +662,7 @@
 
         const tNodes = Array.from(xmlDoc.getElementsByTagName('hp:t'));
 
-        // 1) {{TITLE}} 치환: 굴림체 14pt 보통 (장평 100%, 자간 0%)
+        // 1) {{TITLE}} 치환
         const titleTNode = tNodes.find(n => n.textContent.includes('{{TITLE}}'));
         if (titleTNode) {
           const titleRun = titleTNode.parentNode;
@@ -733,7 +681,7 @@
           titleRun.setAttribute('charPrIDRef', styles.titleCharId);
         }
 
-        // 2) {{BODY_CONTENT}} 치환: 양쪽 정렬, 마크다운 공백 유지
+        // 2) {{BODY_CONTENT}} 치환
         const bodyTNode = Array.from(xmlDoc.getElementsByTagName('hp:t')).find(n => n.textContent.includes('{{BODY_CONTENT}}'));
         if (bodyTNode) {
           const targetRun = bodyTNode.parentNode;
@@ -777,7 +725,7 @@
           }
         }
 
-        // 3) {{ATTACHMENTS}} 치환: 양쪽 정렬, 첫 줄 공백/들여쓰기 없이 시작
+        // 3) {{ATTACHMENTS}} 치환
         const attachTNode = Array.from(xmlDoc.getElementsByTagName('hp:t')).find(n => n.textContent.includes('{{ATTACHMENTS}}'));
         if (attachTNode) {
           const attachRun = attachTNode.parentNode;
@@ -847,7 +795,7 @@
       }
     }
 
-    // 7. AI 프롬프트 복사 & 샘플 데이터 로드
+    // 6. AI 프롬프트 복사 & 샘플 데이터 로드
     function copyAIPrompt() {
       const promptText = `방금 논의한 내용을 바탕으로 국립대학교 공문서 자동 변환기용 마크다운(.md) 초안을 작성해 줘. 반드시 아래 규칙을 지켜줘:
 1. 최상단에 --- 로 감싼 YAML 헤더에 '제목'(줄바꿈 엔터 없이 한 줄로 작성)과 '붙임'(리스트 형태, 마지막 항목 끝에 '  끝.' 표기, 붙임이 없으면 '없음')만 작성할 것.
