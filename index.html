@@ -3,709 +3,894 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>경상국립대학교 기안문 MD → HWPX 변환기</title>
+  <title>국립대학교 공문 HWPX 자동 생성기</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
-    body { font-family: 'Noto Sans KR', sans-serif; background-color: #f3f4f6; }
-    .doc-paper {
-      font-family: 'Batang', '함초롬바탕', 'Malgun Gothic', serif;
-      background: white;
-      box-shadow: 0 4px 20px rgba(0,0,0,0.08);
-      line-height: 1.55;
-    }
-    .doc-paper [contenteditable="true"]:hover {
-      background-color: #fef9c3;
-      outline: 1px dashed #eab308;
-      border-radius: 2px;
-    }
-    .doc-paper [contenteditable="true"]:focus {
-      background-color: #fef08a;
-      outline: 2px solid #ca8a04;
-      border-radius: 2px;
-    }
+    @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
+    body { font-family: 'Pretendard', sans-serif; }
+    .doc-preview { font-family: 'Dotum', '돋움', 'Malgun Gothic', sans-serif; line-height: 1.65; word-break: keep-all; }
   </style>
 </head>
-<body class="text-gray-800">
+<body class="bg-slate-100 text-slate-800 h-screen flex flex-col overflow-hidden">
 
-  <!-- 상단 네비게이션 -->
-  <header class="bg-blue-900 text-white shadow-md">
-    <div class="max-w-7xl mx-auto px-4 py-4 flex flex-wrap items-center justify-between gap-4">
-      <div class="flex items-center gap-3">
-        <div class="bg-white text-blue-900 font-bold px-2.5 py-1 rounded text-sm tracking-tight">GNU</div>
-        <div>
-          <h1 class="text-lg font-bold leading-tight">내부결재 기안문 변환기 (Markdown → HWPX)</h1>
-          <p class="text-xs text-blue-200">AI 대화로 다듬은 기안문 초안(.md)을 대학 표준 한글 서식으로 즉시 출력</p>
-        </div>
-      </div>
-
-      <div class="flex flex-wrap items-center gap-3">
-        <div id="templateStatus" class="text-xs px-3 py-1.5 rounded-full bg-blue-800 text-blue-100 flex items-center gap-1.5">
-          <span class="w-2 h-2 rounded-full bg-yellow-400 animate-pulse"></span>
-          <span>기본 서식(template.hwpx) 연결 중...</span>
-        </div>
-        <button id="copyPromptBtn" class="text-xs bg-amber-500 hover:bg-amber-600 text-gray-950 font-bold px-3 py-1.5 rounded shadow transition flex items-center gap-1">
-          <span>📋 AI용 기안 프롬프트 복사</span>
-        </button>
-      </div>
+  <!-- 상단 헤더 -->
+  <header class="bg-slate-900 text-white px-6 py-3.5 flex items-center justify-between shadow-md shrink-0">
+    <div class="flex items-center gap-3">
+      <span class="bg-blue-600 text-xs font-bold px-2.5 py-1 rounded">GNU HWPX ENGINE</span>
+      <h1 class="text-lg font-bold tracking-tight">공문서 HWPX 자동 조립기</h1>
+      <span class="text-xs text-slate-400 hidden sm:inline">| 제목: 굴림체 14pt(100%/0%) · 본문: 돋움 12pt(95%/-5%) · 양쪽정렬</span>
     </div>
+    <button onclick="copyAIPrompt()" class="bg-slate-700 hover:bg-slate-600 text-xs font-medium px-3.5 py-2 rounded-lg border border-slate-600 transition flex items-center gap-1.5">
+      <span>📋 AI 초안용 MD 프롬프트 복사</span>
+    </button>
   </header>
 
-  <!-- 메인 작업 영역 -->
-  <main class="max-w-7xl mx-auto px-4 py-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
-    
-    <!-- 좌측: MD 업로드 & 마크다운 에디터 (5칸) -->
-    <section class="lg:col-span-5 space-y-4">
-      <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 space-y-4">
-        <div class="flex items-center justify-between border-b pb-2">
-          <h2 class="text-base font-bold text-gray-900 flex items-center gap-2">
-            <span class="bg-blue-100 text-blue-800 w-6 h-6 rounded-full inline-flex items-center justify-center text-xs">1</span>
-            기안문 마크다운(.md) 입력
-          </h2>
-          <button id="loadSampleBtn" class="text-xs text-blue-600 hover:underline font-medium">예시 양식 불러오기</button>
-        </div>
+  <!-- 메인 3단 워크스페이스 -->
+  <main class="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-4 p-4 overflow-hidden">
 
-        <div>
-          <label class="block text-xs font-semibold text-gray-700 mb-1">재정지원사업명 (대괄호 표기용)</label>
-          <input type="text" id="projectNameInput" value="국립대학육성사업" placeholder="예: 국립대학육성사업, RISE사업 (없으면 비워둠)"
-            class="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" />
-        </div>
-
-        <!-- MD 파일 드래그 앤 드롭 영역 -->
-        <div id="mdDropZone" class="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-blue-500 hover:bg-blue-50/50 transition cursor-pointer">
-          <p class="text-xs text-gray-700 font-semibold">📄 마크다운(.md) 파일을 드래그하거나 클릭하여 업로드</p>
-          <p class="text-[11px] text-gray-400 mt-0.5">또는 아래 입력창에 AI가 생성한 마크다운을 바로 붙여넣으세요</p>
-          <input type="file" id="mdFileInput" accept=".md,.txt,.markdown" class="hidden" />
-        </div>
-
-        <!-- 마크다운 실시간 에디터 -->
-        <div>
-          <div class="flex justify-between items-center mb-1">
-            <label class="text-xs font-semibold text-gray-700">마크다운 원문 (실시간 반영)</label>
-            <button id="clearMdBtn" class="text-[11px] text-gray-400 hover:text-red-500">초기화</button>
-          </div>
-          <textarea id="mdEditor" rows="17" class="w-full p-3 text-xs font-mono border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-gray-50 leading-relaxed"></textarea>
-        </div>
+    <!-- [좌측 3컬럼] 1. 템플릿 관리 -->
+    <section class="lg:col-span-3 bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col overflow-hidden">
+      <div class="p-4 border-b border-slate-100 bg-slate-50/70">
+        <h2 class="font-bold text-sm text-slate-700">1. HWPX 마스터 템플릿</h2>
+        <p class="text-xs text-slate-500 mt-0.5">치환자가 포함된 기관 표준 양식</p>
       </div>
+      
+      <div class="p-4 flex-1 flex flex-col gap-4 overflow-y-auto">
+        <div id="templateStatusBox" class="p-3.5 rounded-lg border border-amber-200 bg-amber-50 text-amber-800 text-xs">
+          등록된 템플릿이 없습니다. 1단계에서 만든 <b>.hwpx</b> 파일을 올려주세요.
+        </div>
 
-      <!-- 마크다운 작성 규칙 요약 -->
-      <div class="bg-blue-50 border border-blue-200 rounded-xl p-4 text-xs text-blue-900 space-y-1">
-        <p class="font-bold">💡 계층별 마크다운 들여쓰기 규약</p>
-        <ul class="list-disc pl-4 space-y-0.5 text-blue-800">
-          <li><code># 제목</code> → 상단 공문제목 (사업명 대괄호 자동 결합)</li>
-          <li><code>## 1. 관련</code> → 대항목 (들여쓰기 0칸)</li>
-          <li><code>### 가. 주요 내용</code> 또는 <code>- 가. ...</code> → 중항목 (2칸 들여쓰기)</li>
-          <li><code>1) 세부 항목</code> → 숫자 소항목 (4칸) / <code>- 내용</code> → 불릿 항목 (4~6칸)</li>
-        </ul>
+        <label class="border-2 border-dashed border-slate-300 hover:border-blue-500 rounded-xl p-5 text-center cursor-pointer transition bg-slate-50 hover:bg-blue-50/40">
+          <input type="file" id="hwpxInput" accept=".hwpx" class="hidden" onchange="handleHwpxUpload(event)" />
+          <div class="text-2xl mb-1">📄</div>
+          <div class="text-xs font-semibold text-slate-700">HWPX 템플릿 파일 선택</div>
+          <div class="text-[11px] text-slate-400 mt-1">한 번 등록하면 브라우저에 자동 저장됨</div>
+        </label>
+
+        <div class="bg-slate-50 rounded-lg p-3 border border-slate-200/80 text-xs space-y-1.5">
+          <div class="font-semibold text-slate-700">✅ 치환자 검증 상태</div>
+          <div id="checkTitle" class="text-slate-400">• {{TITLE}} 대기중</div>
+          <div id="checkBody" class="text-slate-400">• {{BODY_CONTENT}} 대기중</div>
+          <div id="checkAttach" class="text-slate-400">• {{ATTACHMENTS}} 대기중</div>
+        </div>
+
+        <div class="bg-blue-50/60 rounded-lg p-3 border border-blue-100 text-xs space-y-2">
+          <div class="font-semibold text-slate-700">⚙️ 적용된 공문 표준 서식</div>
+          <div class="text-[11px] text-slate-600 leading-relaxed">
+            • 제목: <b>굴림체</b> 14pt 보통 (장평 <b>100%</b> / 자간 <b>0%</b>)<br>
+            • 본문: <b>돋움</b> 12pt (장평 <b>95%</b> / 자간 <b>-5%</b>)<br>
+            • 문단 설정: <b>양쪽 정렬</b> / <b>어절</b> 단위 줄나눔
+          </div>
+          <label class="flex items-center gap-2 cursor-pointer text-slate-700 pt-1 border-t border-blue-100">
+            <input type="checkbox" id="removeBottomTable" checked class="rounded text-blue-600 focus:ring-blue-500" />
+            <span>하단 결재란/시행정보 표 자동 제거</span>
+          </label>
+        </div>
       </div>
     </section>
 
-    <!-- 우측: 공문서 실시간 미리보기 & HWPX 출력 (7칸) -->
-    <section class="lg:col-span-7 space-y-4">
-      <div class="flex items-center justify-between bg-white px-5 py-3 rounded-xl shadow-sm border border-gray-200">
-        <div class="flex items-center gap-2">
-          <span class="bg-emerald-100 text-emerald-800 w-6 h-6 rounded-full inline-flex items-center justify-center text-xs font-bold">2</span>
-          <span class="text-sm font-bold text-gray-800">공문서 미리보기 (우측 화면에서 직접 수정 가능)</span>
+    <!-- [중앙 5컬럼] 2. 마크다운 초안 입력 -->
+    <section class="lg:col-span-5 bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col overflow-hidden">
+      <div class="p-4 border-b border-slate-100 bg-slate-50/70 flex items-center justify-between">
+        <div>
+          <h2 class="font-bold text-sm text-slate-700">2. 공문 초안 (Markdown)</h2>
+          <p class="text-xs text-slate-500 mt-0.5">.md 파일 업로드 또는 직접 붙여넣기</p>
         </div>
-        <button id="downloadHwpxBtn" class="bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold px-4 py-2 rounded-lg shadow transition flex items-center gap-1.5">
-          <span>📥 한글(.hwpx) 다운로드</span>
+        <div class="flex gap-2">
+          <button onclick="loadSampleMd()" class="text-xs bg-white hover:bg-slate-100 text-slate-600 px-2.5 py-1.5 rounded border border-slate-300 transition">샘플 불러오기</button>
+          <label class="text-xs bg-blue-50 hover:bg-blue-100 text-blue-700 font-medium px-2.5 py-1.5 rounded border border-blue-200 cursor-pointer transition">
+            .md 열기
+            <input type="file" id="mdInput" accept=".md,.txt" class="hidden" onchange="handleMdUpload(event)" />
+          </label>
+        </div>
+      </div>
+
+      <textarea id="mdEditor" oninput="updatePreview()" placeholder="여기에 AI와 작성한 공문 마크다운 초안을 붙여넣으세요..."
+        class="flex-1 w-full p-4 text-xs font-mono leading-relaxed resize-none focus:outline-none text-slate-800 bg-white"></textarea>
+    </section>
+
+    <!-- [우측 4컬럼] 3. 구조 미리보기 및 다운로드 -->
+    <section class="lg:col-span-4 bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col overflow-hidden">
+      <div class="p-4 border-b border-slate-100 bg-slate-50/70">
+        <h2 class="font-bold text-sm text-slate-700">3. 공문 구조 미리보기 및 출력</h2>
+        <p class="text-xs text-slate-500 mt-0.5">전자결재 기안기용 HWPX 파일 생성</p>
+      </div>
+
+      <div id="previewArea" class="flex-1 p-5 overflow-y-auto doc-preview text-xs bg-slate-50/40 space-y-3">
+        <div class="text-slate-400 text-center mt-20">좌측에 템플릿을 올리고 중앙에 마크다운을 입력하면<br>공문 구조가 실시간으로 표시됩니다.</div>
+      </div>
+
+      <div class="p-4 border-t border-slate-200 bg-white">
+        <button id="generateBtn" onclick="generateHWPX()" disabled
+          class="w-full py-3 px-4 rounded-xl font-bold text-sm text-white bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed shadow-sm transition flex items-center justify-center gap-2">
+          <span>⬇️ 공문 HWPX 생성 및 다운로드</span>
         </button>
       </div>
-
-      <!-- A4 용지 비율 미리보기 영역 -->
-      <div id="previewContainer" class="doc-paper p-8 md:p-12 rounded-xl border border-gray-300 min-h-[840px] text-[14px]">
-        <div class="text-center border-b-2 border-gray-800 pb-3 mb-4">
-          <p class="text-xs text-gray-500 tracking-widest mb-1">혁신을 이끄는 국가거점국립대학의 리더</p>
-          <h2 class="text-2xl font-extrabold tracking-[0.25em] text-gray-900">경상국립대학교</h2>
-        </div>
-
-        <table class="w-full border-collapse mb-6 text-[14px]">
-          <tr>
-            <td class="w-20 py-1 font-bold text-gray-700">수&nbsp;&nbsp;&nbsp;신</td>
-            <td class="py-1" id="prevReceiver" contenteditable="true">내부결재</td>
-          </tr>
-          <tr>
-            <td class="py-1 font-bold text-gray-700">(경유)</td>
-            <td class="py-1" id="prevVia" contenteditable="true"></td>
-          </tr>
-          <tr class="border-b-2 border-gray-800">
-            <td class="py-1.5 font-bold text-gray-700">제&nbsp;&nbsp;&nbsp;목</td>
-            <td class="py-1.5 font-bold text-gray-900">
-              <span id="prevProjectPrefix">[국립대학육성사업] </span><span id="prevTitle" contenteditable="true">여기에 공문 제목이 표시됩니다.</span>
-            </td>
-          </tr>
-        </table>
-
-        <div id="docBodyPreview" class="space-y-1.5 text-gray-900"></div>
-      </div>
     </section>
+
   </main>
 
   <script>
-    // ==========================================
-    // 1. 전역 변수 및 템플릿 자동 로드
-    // ==========================================
-    let templateArrayBuffer = null;
-    let parsedBlocks = [];
+    let templateBuffer = null;
+    let templateFileName = '';
+    const HP_NS = 'http://www.hancom.co.kr/hwpml/2011/paragraph';
+    const HH_NS = 'http://www.hancom.co.kr/hwpml/2011/head';
+    const HC_NS = 'http://www.hancom.co.kr/hwpml/2011/core';
 
-    async function loadTemplateHwpx() {
+    // 1. IndexedDB 템플릿 저장/불러오기
+    const DB_NAME = 'GnuHwpxTemplateDB';
+    const STORE_NAME = 'templates';
+
+    function openDB() {
+      return new Promise((resolve, reject) => {
+        const req = indexedDB.open(DB_NAME, 1);
+        req.onupgradeneeded = () => req.result.createObjectStore(STORE_NAME);
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    async function saveTemplateToDB(name, buffer) {
+      const db = await openDB();
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      tx.objectStore(STORE_NAME).put({ name, buffer }, 'master');
+    }
+
+    async function loadTemplateFromDB() {
+      const db = await openDB();
+      return new Promise((resolve) => {
+        const tx = db.transaction(STORE_NAME, 'readonly');
+        const req = tx.objectStore(STORE_NAME).get('master');
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => resolve(null);
+      });
+    }
+
+    window.addEventListener('DOMContentLoaded', async () => {
+      const saved = await loadTemplateFromDB();
+      if (saved && saved.buffer) {
+        await validateAndSetTemplate(saved.name, saved.buffer, false);
+      }
+      loadSampleMd();
+    });
+
+    // 2. HWPX 템플릿 검증 및 로드
+    async function handleHwpxUpload(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      const buffer = await file.arrayBuffer();
+      await validateAndSetTemplate(file.name, buffer, true);
+    }
+
+    async function validateAndSetTemplate(name, buffer, shouldSave) {
       try {
-        const res = await fetch(`./template.hwpx?t=${Date.now()}`); if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        templateArrayBuffer = await res.arrayBuffer();
-        updateTemplateStatus(true, '기본 서식(template.hwpx) 자동 연결됨');
-        return true;
-      } catch (e) {
-        updateTemplateStatus(false, window.location.protocol === 'file:'
-          ? '로컬(file://) 제한 — GitHub Pages에서 자동 연결됨'
-          : 'template.hwpx 파일을 찾을 수 없음');
-        return false;
+        const zip = await JSZip.loadAsync(buffer);
+        const sectionFile = zip.file('Contents/section0.xml');
+        if (!sectionFile) throw new Error('Contents/section0.xml을 찾을 수 없습니다.');
+
+        const xmlText = await sectionFile.async('string');
+        const hasTitle = xmlText.includes('{{TITLE}}');
+        const hasBody = xmlText.includes('{{BODY_CONTENT}}');
+        const hasAttach = xmlText.includes('{{ATTACHMENTS}}');
+
+        document.getElementById('checkTitle').innerHTML = hasTitle ? '<span class="text-emerald-600 font-semibold">✔ {{TITLE}} 확인됨</span>' : '<span class="text-rose-600">✘ {{TITLE}} 누락</span>';
+        document.getElementById('checkBody').innerHTML = hasBody ? '<span class="text-emerald-600 font-semibold">✔ {{BODY_CONTENT}} 확인됨</span>' : '<span class="text-rose-600">✘ {{BODY_CONTENT}} 누락</span>';
+        document.getElementById('checkAttach').innerHTML = hasAttach ? '<span class="text-emerald-600 font-semibold">✔ {{ATTACHMENTS}} 확인됨</span>' : '<span class="text-rose-600">✘ {{ATTACHMENTS}} 누락</span>';
+
+        if (!hasTitle || !hasBody) {
+          alert('템플릿에 {{TITLE}} 또는 {{BODY_CONTENT}} 치환자가 없습니다.');
+          return;
+        }
+
+        templateBuffer = buffer;
+        templateFileName = name;
+        if (shouldSave) await saveTemplateToDB(name, buffer);
+
+        const statusBox = document.getElementById('templateStatusBox');
+        statusBox.className = 'p-3.5 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-800 text-xs';
+        statusBox.innerHTML = `<b>적용 완료:</b> ${name}<br><span class="text-[11px] text-emerald-600">브라우저에 안전하게 저장되었습니다.</span>`;
+        document.getElementById('generateBtn').disabled = false;
+      } catch (err) {
+        alert('HWPX 파일 분석 중 오류: ' + err.message);
       }
     }
 
-    function updateTemplateStatus(isOk, msg) {
-      const el = document.getElementById('templateStatus');
-      el.innerHTML = `<span class="w-2 h-2 rounded-full ${isOk ? 'bg-emerald-400' : 'bg-red-400'}"></span><span>${msg}</span>`;
-    }
-
-    // ==========================================
-    // 2. AI용 기안 프롬프트 & 예시 마크다운
-    // ==========================================
-    const AI_SYSTEM_PROMPT_TEMPLATE = `당신은 경상국립대학교 행정 공문서 기안 전문가입니다. 아래 요청사항과 첨부 자료를 바탕으로 내부결재 기안문 초안을 작성해 주세요.
-반드시 아래의 [마크다운 출력 규약]을 100% 지켜서 코드블록(\`\`\`markdown) 안에 출력해 주세요.
-
-[마크다운 출력 규약]
-1. 문서 최상단 제목: '# 순수 공문 제목' (사업명 대괄호 제외)
-2. 대항목(1., 2., 3., 4.): '## 1. 관련', '## 2. 기안 목적', '## 3. 추진 내용', '## 4. 향후 일정'
-3. 중항목(가., 나.): '### 가. 주요 내용 및 현황', '### 나. 세부 추진 사항'
-4. 숫자 소항목(1), 2)): '1) 소제목' 형태로 작성하고, 그 하위 설명은 반드시 '- 설명 내용' 형태로 불릿(-)을 붙일 것
-5. 모든 본문 문장은 간결한 행정문서 개조식('~함.', '~임.', '~바람.')으로 작성하며, 절대 볼드(**) 기호를 본문에 쓰지 말 것
-6. 관련 공문은 '- 가. 부서명-문서번호(YYYY.MM.DD.) 「공문제목」' 형식으로 나열
-7. 표가 필요할 경우 표 바로 위에 '(단위: 건)'을 적고, 표준 마크다운 표(| 열1 | 열2 |)를 작성하며, 표 하단 주석은 '* 주석 내용'으로 작성
-8. 날짜는 "'26. 11. 20.(금)" 형식으로 표기
-9. 맨 마지막에는 '## 붙임' 섹션을 두고 '1. 문서명 1부.' 형식으로 나열 ('끝.'은 시스템이 자동 부착하므로 쓰지 말 것)
-
-[기안 요청 내용]
-여기에 기안하려는 목적과 핵심 내용을 입력하세요.`;
-
-    const SAMPLE_MARKDOWN = `# 2026학년도 AI 융합 교육과정 개발 및 인증 연구 지원 사업 운영 개선(안)
-
-## 1. 관련
-- 가. 교육과정과-9248(2026.11.19.) 「2026학년도 AI 융합 교육과정 개발 및 인증 연구 공모 과제 선정에 따른 예산 재배정 수정(안)」
-
-## 2. 기안 목적
-- AI-X 공모 과제 참여 교원의 중도탈락 예방 및 원활한 사업 운영을 위한 개선(안)을 마련하고자 함.
-
-## 3. 추진 내용
-### 가. 주요 내용 및 현황
-- 1~3차 공모 결과 11개 단과대학(41개 학과) 총 58건의 연구과제가 최종 확정됨.
-- 누적 신청 62건 중 4건이 취소·철회됨에 따라 잔여 과제의 중도탈락 방지 대책이 요구됨.
-(단위: 건)
-| 구분 | 1차 공모 | 2차 공모 | 3차 공모 | 합계 | 비고 |
-| --- | --- | --- | --- | --- | --- |
-| 신규 개발 | 10 | 4 | 16 | 30 | |
-| 인증 | 15 | 9 | 4 | 28 | 명칭변경 인증 10건 포함 |
-| 총 계 | 25 | 13 | 20 | 58* | |
-* 누적 신청 62건 중 공모 선정 취소·철회 4건을 제외한 총 58건 최종 확정 현황임.
-
-### 나. 세부 추진 사항
-1) 결과보고서 제출 기한 통일
-- 1차 선정자(25건)와 2차·3차 선정자(33건) 간 상이하던 제출 기한을 단일 기한으로 통일함.
-- 일정 차이에 따른 행정 혼선을 방지하고, 충분한 연구 기간을 보장하여 중도 포기를 예방함.
-2) 결과보고서 초안 생성기 웹앱 개발 및 배포
-- 보고서 작성 부담 경감을 위해 생성형 AI 기반 '결과보고서 초안 생성기' 웹앱을 개발함.
-- 개발된 웹앱을 전체 선정 교원(58명)에게 배포하여 표준 양식에 맞춘 초안 작성을 지원함.
-
-## 4. 향후 일정
-- 운영 개선(안) 내부결재 및 확정: '26. 11. 20.(금)
-- 결과보고서 제출 기한 통일 안내(전체 참여 교원 58명): '26. 11. 23.(월)
-- 결과보고서 초안 생성기 웹앱 배포(활용 매뉴얼 포함): '26. 11. 25.(수)
-
-## 붙임
-1. 2026학년도 AI 융합 교육과정 개발 및 인증 연구 지원 사업 운영 개선(안) 1부.
-2. AI-X 결과보고서 초안 생성기 웹앱 활용 매뉴얼 1부.`;
-
-    document.getElementById('copyPromptBtn').addEventListener('click', () => {
-      navigator.clipboard.writeText(AI_SYSTEM_PROMPT_TEMPLATE).then(() => {
-        alert('AI용 기안 프롬프트가 클립보드에 복사되었습니다!\nGemini 채팅창에 붙여넣고 기안 내용을 입력해 보세요.');
-      });
-    });
-
-    document.getElementById('loadSampleBtn').addEventListener('click', () => {
-      document.getElementById('mdEditor').value = SAMPLE_MARKDOWN;
-      updateAll();
-    });
-
-    document.getElementById('clearMdBtn').addEventListener('click', () => {
-      document.getElementById('mdEditor').value = '';
-      updateAll();
-    });
-
-    // ==========================================
-    // 3. 파일 업로드 및 입력 이벤트
-    // ==========================================
-    const mdDropZone = document.getElementById('mdDropZone');
-    const mdFileInput = document.getElementById('mdFileInput');
-    const mdEditor = document.getElementById('mdEditor');
-    const projectNameInput = document.getElementById('projectNameInput');
-
-    mdDropZone.addEventListener('click', () => mdFileInput.click());
-    mdDropZone.addEventListener('dragover', (e) => { e.preventDefault(); mdDropZone.classList.add('border-blue-500', 'bg-blue-50'); });
-    mdDropZone.addEventListener('dragleave', () => mdDropZone.classList.remove('border-blue-500', 'bg-blue-50'));
-    mdDropZone.addEventListener('drop', (e) => {
-      e.preventDefault();
-      mdDropZone.classList.remove('border-blue-500', 'bg-blue-50');
-      if (e.dataTransfer.files[0]) readMdFile(e.dataTransfer.files[0]);
-    });
-    mdFileInput.addEventListener('change', (e) => {
-      if (e.target.files[0]) readMdFile(e.target.files[0]);
-    });
-
-    function readMdFile(file) {
+    // 3. 마크다운 파일 읽기 및 파싱
+    function handleMdUpload(e) {
+      const file = e.target.files[0];
+      if (!file) return;
       const reader = new FileReader();
-      reader.onload = (e) => {
-        mdEditor.value = e.target.result;
-        updateAll();
+      reader.onload = (ev) => {
+        document.getElementById('mdEditor').value = ev.target.result;
+        updatePreview();
       };
       reader.readAsText(file, 'UTF-8');
     }
 
-    mdEditor.addEventListener('input', updateAll);
-    projectNameInput.addEventListener('input', updateAll);
+    function parseMarkdownDoc(rawText) {
+      let titleParts = [];
+      let attachments = [];
+      let bodyText = rawText.trim();
 
-    window.addEventListener('DOMContentLoaded', async () => {
-      await loadTemplateHwpx();
-      mdEditor.value = SAMPLE_MARKDOWN;
-      updateAll();
-    });
+      const fmMatch = bodyText.match(/^---\s*\r?\n([\s\S]*?)\r?\n---\s*(?:\r?\n([\s\S]*))?$/);
+      if (fmMatch) {
+        const metaLines = fmMatch[1].split(/\r?\n/);
+        let currentKey = '';
 
-    // ==========================================
-    // 4. 마크다운 정밀 파서
-    // ==========================================
-    function cleanMdInline(str) {
-      return str.replace(/\*\*(.*?)\*\*/g, '$1').trim();
-    }
+        metaLines.forEach(line => {
+          const trimLine = line.trim();
+          if (!trimLine) return;
 
-    function parseMarkdownToBlocks(mdText) {
-      const lines = mdText.split(/\r?\n/);
-      let title = '';
+          if (trimLine.startsWith('제목:')) {
+            currentKey = 'title';
+            const val = trimLine.replace(/^제목:\s*/, '').replace(/^["']|["']$/g, '').replace(/\\n/g, ' ').trim();
+            if (val) titleParts.push(val);
+          } else if (trimLine.startsWith('붙임:')) {
+            currentKey = 'attach';
+            const inlineVal = trimLine.replace(/^붙임:\s*/, '').trim();
+            if (inlineVal && inlineVal !== '없음') {
+              attachments.push(inlineVal);
+            }
+          } else if (currentKey === 'title') {
+            const extra = trimLine.replace(/^-\s*/, '').replace(/^["']|["']$/g, '').replace(/\\n/g, ' ').trim();
+            if (extra) titleParts.push(extra);
+          } else if (currentKey === 'attach' && trimLine.startsWith('-')) {
+            const item = trimLine.replace(/^-\s*/, '').trim();
+            if (item && item !== '없음') {
+              attachments.push(item);
+            }
+          }
+        });
+
+        bodyText = (fmMatch[2] || '').trim();
+      }
+
+      const title = titleParts.length > 0 ? titleParts.join(' ') : '제목 없음';
+
+      const lines = bodyText.split(/\r?\n/);
       const blocks = [];
-      const attachments = [];
-      let inAttachments = false;
-      let underNumItem = false;
       let i = 0;
 
       while (i < lines.length) {
-        let line = lines[i].trim();
+        const line = lines[i];
+        const trimmed = line.trim();
 
-        if (line.startsWith('```') || !line) {
+        if (!trimmed) {
           i++;
           continue;
         }
 
-        // # 최상단 공문 제목
-        if (line.startsWith('# ') && !title) {
-          title = cleanMdInline(line.replace(/^#\s+/, ''));
-          i++;
-          continue;
-        }
+        // 표 시작 감지
+        if (trimmed.startsWith('|') && trimmed.endsWith('|')) {
+          let unitText = '';
+          if (blocks.length > 0 && blocks[blocks.length - 1].type === 'unit') {
+            unitText = blocks.pop().text;
+          }
 
-        // ## 붙임 섹션 감지
-        if (/^##\s*붙임/.test(line)) {
-          inAttachments = true;
-          i++;
-          continue;
-        }
-
-        if (inAttachments) {
-          const cleanedAtt = cleanMdInline(line)
-            .replace(/^[-*•]\s*/, '')
-            .replace(/^\d+\.\s*/, '')
-            .replace(/\s*끝\.$/, '')
-            .trim();
-          if (cleanedAtt) attachments.push(cleanedAtt);
-          i++;
-          continue;
-        }
-
-        // ## 대항목 (1. 관련, 2. 기안 목적 등)
-        if (line.startsWith('## ')) {
-          underNumItem = false;
-          blocks.push({ type: 'h2', text: cleanMdInline(line.replace(/^##\s+/, '')) });
-          i++;
-          continue;
-        }
-
-        // ### 중항목 (가. 주요 내용 등)
-        if (line.startsWith('### ')) {
-          underNumItem = false;
-          blocks.push({ type: 'h3', text: cleanMdInline(line.replace(/^###\s+/, '')) });
-          i++;
-          continue;
-        }
-
-        // #### 소항목
-        if (line.startsWith('#### ')) {
-          underNumItem = true;
-          blocks.push({ type: 'numItem', text: cleanMdInline(line.replace(/^####\s+/, '')) });
-          i++;
-          continue;
-        }
-
-        // 표 단위 표기: (단위: 건) 등
-        if (/^\(단위\s*:/.test(line)) {
-          blocks.push({ type: 'tableUnit', text: cleanMdInline(line) });
-          i++;
-          continue;
-        }
-
-        // 마크다운 표
-        if (line.startsWith('|') && line.endsWith('|')) {
-          const tableLines = [];
-          while (i < lines.length && lines[i].trim().startsWith('|')) {
-            tableLines.push(lines[i].trim());
+          const tableRows = [];
+          while (i < lines.length && lines[i].trim().startsWith('|') && lines[i].trim().endsWith('|')) {
+            const rowStr = lines[i].trim();
+            if (!/^\|[\s\-:|]+\|$/.test(rowStr)) {
+              const cells = rowStr.slice(1, -1).split('|').map(c => c.trim());
+              tableRows.push(cells);
+            }
             i++;
           }
-          const parsedTable = parseMarkdownTable(tableLines);
-          if (parsedTable) {
-            if (blocks.length > 0 && blocks[blocks.length - 1].type === 'tableUnit') {
-              parsedTable.unit = blocks.pop().text;
-            }
-            blocks.push(parsedTable);
+          if (tableRows.length > 0) {
+            blocks.push({ type: 'table', unit: unitText, rows: tableRows });
           }
           continue;
         }
 
-        // 표 하단 주석
-        if (line.startsWith('* ') || line.startsWith('> *')) {
-          blocks.push({ type: 'note', text: cleanMdInline(line.replace(/^>\s*/, '')) });
+        // 표 단위 표기
+        if (/^[\[\(]단위\s*:.*[\]\)]$/.test(trimmed)) {
+          blocks.push({ type: 'unit', text: trimmed.replace(/^\[/, '(').replace(/\]$/, ')') });
           i++;
           continue;
         }
 
-        // 숫자 소항목: 1) ..., 2) ...
-        if (/^\d+\)\s*/.test(line)) {
-          underNumItem = true;
-          blocks.push({ type: 'numItem', text: cleanMdInline(line) });
-          i++;
-          continue;
-        }
-
-        // 불릿 항목 (- 또는 •)
-        if (/^[-•]\s+/.test(line)) {
-          const content = cleanMdInline(line.replace(/^[-•]\s+/, ''));
-          if (/^[가-힣]\.\s+/.test(content)) {
-            underNumItem = false;
-            blocks.push({ type: 'alphaItem', text: content });
-          } else {
-            blocks.push({ type: underNumItem ? 'subBullet' : 'bullet', text: content });
-          }
-          i++;
-          continue;
-        }
-
-        // 기호 없는 일반 줄 처리
-        const cleaned = cleanMdInline(line);
-        if (/^[가-힣]\.\s+/.test(cleaned)) {
-          underNumItem = false;
-          blocks.push({ type: 'alphaItem', text: cleaned });
-        } else {
-          blocks.push({ type: underNumItem ? 'subBullet' : 'bullet', text: cleaned });
-        }
+        const leadingSpaces = line.match(/^(\s*)/)[1].length;
+        blocks.push({ type: 'line', indent: leadingSpaces, text: trimmed });
         i++;
       }
 
-      return { title, blocks, attachments };
+      return { title, attachments, blocks };
     }
 
-    function parseMarkdownTable(tableLines) {
-      if (tableLines.length < 2) return null;
-      const splitRow = (rowStr) =>
-        rowStr.replace(/^\|/, '').replace(/\|$/, '').split('|').map(c => cleanMdInline(c));
+    // 4. 실시간 미리보기 렌더링
+    function updatePreview() {
+      const raw = document.getElementById('mdEditor').value;
+      const parsed = parseMarkdownDoc(raw);
+      const preview = document.getElementById('previewArea');
 
-      const headers = splitRow(tableLines[0]);
-      const rows = [];
+      const formatBoldHtml = (str) => str.replace(/\*\*(.*?)\*\*/g, '<strong class="font-bold text-slate-900">$1</strong>');
 
-      for (let r = 1; r < tableLines.length; r++) {
-        if (/^\|?[\s:-]+\|/.test(tableLines[r]) && tableLines[r].includes('-')) continue;
-        const rowCells = splitRow(tableLines[r]);
-        while (rowCells.length < headers.length) rowCells.push('');
-        rows.push(rowCells.slice(0, headers.length));
-      }
+      let html = `
+        <div class="bg-white p-4 rounded-lg border border-slate-200 shadow-xs space-y-3">
+          <div class="border-b border-slate-200 pb-2">
+            <span class="text-[11px] font-bold text-blue-600 block">제목 (굴림체 14pt · 장평 100% · 자간 0%)</span>
+            <div style="font-family: 'GulimChe', '굴림체', sans-serif;" class="font-normal text-sm text-slate-900 mt-0.5">${parsed.title}</div>
+          </div>
+          <div class="space-y-1.5 text-slate-800 whitespace-pre-wrap text-justify">
+      `;
 
-      return { type: 'table', unit: '', headers, rows };
-    }
-
-    // ==========================================
-    // 5. 실시간 미리보기 렌더링 및 동기화
-    // ==========================================
-    function updateAll() {
-      const mdText = mdEditor.value;
-      const projectName = projectNameInput.value.trim();
-      const parsed = parseMarkdownToBlocks(mdText);
-      parsed.projectName = projectName;
-      parsedBlocks = parsed;
-
-      document.getElementById('prevProjectPrefix').textContent = projectName ? `[${projectName}] ` : '';
-      document.getElementById('prevTitle').textContent = parsed.title || '공문 제목을 입력하세요';
-
-      let html = '';
-
-      parsed.blocks.forEach((b, bIdx) => {
-        if (b.type === 'h2') {
-          html += `<p class="font-bold pt-2.5" contenteditable="true" data-bidx="${bIdx}">${b.text}</p>`;
-        } else if (b.type === 'h3' || b.type === 'alphaItem') {
-          html += `<p class="pl-4 pt-1 font-medium" contenteditable="true" data-bidx="${bIdx}">${b.text}</p>`;
-        } else if (b.type === 'bullet') {
-          html += `<p class="pl-8" contenteditable="true" data-bidx="${bIdx}">- ${b.text}</p>`;
-        } else if (b.type === 'numItem') {
-          html += `<p class="pl-8 pt-0.5" contenteditable="true" data-bidx="${bIdx}">${b.text}</p>`;
-        } else if (b.type === 'subBullet') {
-          html += `<p class="pl-12" contenteditable="true" data-bidx="${bIdx}">- ${b.text}</p>`;
-        } else if (b.type === 'note') {
-          html += `<p class="pl-8 text-xs text-gray-700" contenteditable="true" data-bidx="${bIdx}">${b.text}</p>`;
+      parsed.blocks.forEach(b => {
+        if (b.type === 'line' || b.type === 'unit') {
+          const spaces = ' '.repeat(b.indent);
+          html += `<div>${spaces}${formatBoldHtml(b.text)}</div>`;
         } else if (b.type === 'table') {
-          html += `<div class="pl-8 my-2">`;
-          if (b.unit) {
-            html += `<p class="text-right text-xs text-gray-600 mb-1" contenteditable="true" data-bidx="${bIdx}" data-tunit="1">${b.unit}</p>`;
-          }
-          html += `<table class="w-full border-collapse border border-gray-800 text-center text-xs"><thead><tr class="bg-gray-100 font-bold">`;
-          b.headers.forEach((h, cIdx) => {
-            html += `<th class="border border-gray-800 py-1.5 px-2" contenteditable="true" data-bidx="${bIdx}" data-th="${cIdx}">${h}</th>`;
-          });
-          html += `</tr></thead><tbody>`;
+          if (b.unit) html += `<div class="text-right text-[11px] text-slate-600 mt-2">${b.unit}</div>`;
+          html += `<table class="w-full border-collapse border border-slate-400 text-[11px] mb-1">`;
           b.rows.forEach((row, rIdx) => {
-            html += `<tr>`;
-            row.forEach((cell, cIdx) => {
-              html += `<td class="border border-gray-800 py-1.5 px-2" contenteditable="true" data-bidx="${bIdx}" data-tr="${rIdx}" data-tc="${cIdx}">${cell}</td>`;
+            html += `<tr class="${rIdx === 0 ? 'bg-slate-100 font-bold' : ''}">`;
+            row.forEach(cell => {
+              html += `<td class="border border-slate-400 px-2 py-1 text-center">${formatBoldHtml(cell)}</td>`;
             });
             html += `</tr>`;
           });
-          html += `</tbody></table></div>`;
+          html += `</table>`;
         }
       });
 
-      // 붙임 및 끝 처리
-      html += `<div class="pt-4">`;
-      if (parsed.attachments.length > 0) {
-        parsed.attachments.forEach((att, idx) => {
-          const isLast = idx === parsed.attachments.length - 1;
-          const prefix = idx === 0 ? '붙임 ' : '&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;';
-          const numStr = parsed.attachments.length === 1 ? '' : `${idx + 1}. `;
-          html += `<p contenteditable="true" data-attidx="${idx}">${prefix}${numStr}${att}${isLast ? '&nbsp;&nbsp;끝.' : ''}</p>`;
-        });
-      } else if (parsed.blocks.length > 0) {
-        html += `<p class="text-right pr-4">끝.</p>`;
-      }
       html += `</div>`;
 
-      document.getElementById('docBodyPreview').innerHTML = html || `<div class="text-center text-gray-400 py-24 font-sans">좌측에 마크다운(.md)을 입력하면 공문서가 자동 생성됩니다.</div>`;
-    }
-
-    function syncPreviewEdits() {
-      parsedBlocks.title = document.getElementById('prevTitle').textContent.trim();
-
-      document.querySelectorAll('#docBodyPreview [contenteditable="true"]').forEach(el => {
-        const text = el.textContent.replace(/\u00A0/g, ' ').trim();
-        if (el.dataset.bidx !== undefined) {
-          const b = parsedBlocks.blocks[Number(el.dataset.bidx)];
-          if (!b) return;
-          if (el.dataset.tunit) b.unit = text;
-          else if (el.dataset.th !== undefined) b.headers[Number(el.dataset.th)] = text;
-          else if (el.dataset.tr !== undefined) b.rows[Number(el.dataset.tr)][Number(el.dataset.tc)] = text;
-          else if (b.type === 'bullet' || b.type === 'subBullet') b.text = text.replace(/^-\s*/, '');
-          else b.text = text;
-        } else if (el.dataset.attidx !== undefined) {
-          parsedBlocks.attachments[Number(el.dataset.attidx)] = text
-            .replace(/^붙임\s*/, '')
-            .replace(/^\d+\.\s*/, '')
-            .replace(/\s*끝\.$/, '');
-        }
-      });
-    }
-
-    // ==========================================
-    // 6. HWPX XML 조립 및 다운로드 엔진
-    // ==========================================
-    function escapeXml(str) {
-      if (!str) return '';
-      return String(str)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&apos;');
-    }
-
-    function calculateSmartColWidths(headers, totalWidth) {
-      const weights = headers.map(h => {
-        if (/비고|내용|설명|과제명|사업명|세부/.test(h)) return 2.3;
-        if (/구분|항목|단과대학|학과/.test(h)) return 1.3;
-        return 1.0;
-      });
-      const totalWeight = weights.reduce((a, b) => a + b, 0);
-      const widths = weights.map(w => Math.floor((totalWidth * w) / totalWeight));
-      const diff = totalWidth - widths.reduce((a, b) => a + b, 0);
-      widths[widths.length - 1] += diff;
-      return widths;
-    }
-
-    function buildHwpxBodyXml(data) {
-      let xml = '';
-      // 한글이 문단 앞 공백을 지우지 못하도록 고정 공백(\u00A0) 사용
-      const NBSP = '\u00A0';
-      const indent = (count) => NBSP.repeat(count);
-
-      const p = (paraPr, charPr, text) =>
-        `<hp:p id="0" paraPrIDRef="${paraPr}" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0"><hp:run charPrIDRef="${charPr}"><hp:t>${escapeXml(text)}</hp:t></hp:run></hp:p>`;
-
-      data.blocks.forEach((b) => {
-        if (b.type === 'h2') {
-          // 대항목 (1., 2., 3., 4.)
-          xml += p(22, 15, b.text);
-        } else if (b.type === 'h3' || b.type === 'alphaItem') {
-          // 중항목 (가., 나.) - 2칸 들여쓰기
-          xml += p(21, 17, `${indent(2)}${b.text}`);
-        } else if (b.type === 'bullet') {
-          // 개조식 항목 - 4칸 들여쓰기 + 하이픈
-          xml += p(20, 17, `${indent(4)}-${NBSP}${b.text}`);
-        } else if (b.type === 'numItem') {
-          // 숫자 소항목 (1), 2)) - 4칸 들여쓰기
-          xml += p(20, 15, `${indent(4)}${b.text}`);
-        } else if (b.type === 'subBullet') {
-          // 1) 하위 개조식 항목 - 6칸 들여쓰기 + 하이픈
-          xml += p(20, 17, `${indent(6)}-${NBSP}${b.text}`);
-        } else if (b.type === 'note') {
-          // 표 하단 * 주석 - 4칸 들여쓰기
-          xml += p(21, 24, `${indent(4)}${b.text}`);
-        } else if (b.type === 'table' && b.headers.length > 0) {
-          // 표 우측 상단 단위 표기는 표 밖 독립 문단(우측 정렬 paraPrIDRef="19")으로 안전하게 배치
-          if (b.unit) {
-            xml += p(19, 20, b.unit);
-          }
-
-          const colCount = b.headers.length;
-          const totalWidth = 46883;
-          const colWidths = calculateSmartColWidths(b.headers, totalWidth);
-          const totalRows = b.rows.length + 1;
-
-          let tblXml = `<hp:p id="0" paraPrIDRef="25" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0"><hp:run charPrIDRef="17"><hp:t>${indent(3)}</hp:t>`;
-          tblXml += `<hp:tbl id="${Math.floor(Math.random()*900000000)+100000000}" zOrder="4" numberingType="TABLE" textWrap="TOP_AND_BOTTOM" textFlow="BOTH_SIDES" lock="0" dropcapstyle="None" pageBreak="CELL" repeatHeader="1" rowCnt="${totalRows}" colCnt="${colCount}" cellSpacing="0" borderFillIDRef="6" noAdjust="0">`;
-          tblXml += `<hp:sz width="${totalWidth}" widthRelTo="ABSOLUTE" height="${totalRows * 1250}" heightRelTo="ABSOLUTE" protect="0"/>`;
-          tblXml += `<hp:pos treatAsChar="1" affectLSpacing="0" flowWithText="1" allowOverlap="0" holdAnchorAndSO="0" vertRelTo="PARA" horzRelTo="PARA" vertAlign="TOP" horzAlign="LEFT" vertOffset="0" horzOffset="0"/>`;
-          tblXml += `<hp:outMargin left="140" right="140" top="60" bottom="80"/><hp:inMargin left="300" right="300" top="80" bottom="80"/>`;
-
-          // 헤더 행
-          tblXml += `<hp:tr>`;
-          b.headers.forEach((h, cIdx) => {
-            tblXml += `<hp:tc name="" header="1" hasMargin="0" protect="0" editable="0" dirty="0" borderFillIDRef="8">`;
-            tblXml += `<hp:subList id="" textDirection="HORIZONTAL" lineWrap="BREAK" vertAlign="CENTER" linkListIDRef="0" linkListNextIDRef="0" textWidth="0" textHeight="0" hasTextRef="0" hasNumRef="0">`;
-            tblXml += `<hp:p id="0" paraPrIDRef="18" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0"><hp:run charPrIDRef="33"><hp:t>${escapeXml(h)}</hp:t></hp:run></hp:p>`;
-            tblXml += `</hp:subList><hp:cellAddr colAddr="${cIdx}" rowAddr="0"/><hp:cellSpan colSpan="1" rowSpan="1"/><hp:cellSz width="${colWidths[cIdx]}" height="1250"/><hp:cellMargin left="300" right="300" top="80" bottom="80"/></hp:tc>`;
-          });
-          tblXml += `</hp:tr>`;
-
-          // 데이터 행
-          b.rows.forEach((row, rIdx) => {
-            const isLast = rIdx === b.rows.length - 1;
-            const borderId = isLast ? 19 : 12;
-            tblXml += `<hp:tr>`;
-            for (let cIdx = 0; cIdx < colCount; cIdx++) {
-              tblXml += `<hp:tc name="" header="0" hasMargin="0" protect="0" editable="0" dirty="0" borderFillIDRef="${borderId}">`;
-              tblXml += `<hp:subList id="" textDirection="HORIZONTAL" lineWrap="BREAK" vertAlign="CENTER" linkListIDRef="0" linkListNextIDRef="0" textWidth="0" textHeight="0" hasTextRef="0" hasNumRef="0">`;
-              tblXml += `<hp:p id="0" paraPrIDRef="18" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0"><hp:run charPrIDRef="36"><hp:t>${escapeXml(row[cIdx] || '')}</hp:t></hp:run></hp:p>`;
-              tblXml += `</hp:subList><hp:cellAddr colAddr="${cIdx}" rowAddr="${rIdx + 1}"/><hp:cellSpan colSpan="1" rowSpan="1"/><hp:cellSz width="${colWidths[cIdx]}" height="1250"/><hp:cellMargin left="300" right="300" top="80" bottom="80"/></hp:tc>`;
-            }
-            tblXml += `</hp:tr>`;
-          });
-
-          tblXml += `</hp:tbl><hp:t/></hp:run></hp:p>`;
-          xml += tblXml;
-        }
-      });
-
-      // 본문과 붙임 사이 빈 줄 1줄
-      xml += `<hp:p id="0" paraPrIDRef="20" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0"><hp:run charPrIDRef="19"/></hp:p>`;
-
-      // 붙임 및 끝 처리 (고정 공백으로 줄맞춤)
-      if (data.attachments.length > 0) {
-        data.attachments.forEach((att, idx) => {
-          const isLast = idx === data.attachments.length - 1;
-          const prefix = idx === 0 ? `붙임${NBSP}` : indent(5);
-          const numStr = data.attachments.length === 1 ? '' : `${idx + 1}.${NBSP}`;
-          const endStr = isLast ? `${NBSP}${NBSP}끝.` : '';
-          xml += p(20, 15, `${prefix}${numStr}${att}${endStr}`);
+      if (parsed.attachments.length > 0) {
+        html += `<div class="border-t border-slate-200 pt-2 text-slate-700 whitespace-pre-wrap text-justify">`;
+        parsed.attachments.forEach((att, idx) => {
+          html += `<div>${idx === 0 ? '붙임  ' : '      '}${att}</div>`;
         });
-      } else {
-        xml += p(20, 15, `${indent(2)}끝.`);
+        html += `</div>`;
       }
 
-      return xml;
+      html += `</div>`;
+      preview.innerHTML = html;
     }
 
-    document.getElementById('downloadHwpxBtn').addEventListener('click', async () => {
-      if (!templateArrayBuffer) {
-        const ok = await loadTemplateHwpx();
-        if (!ok) {
-          return alert('같은 폴더의 template.hwpx 파일을 불러오지 못했습니다.\nGitHub Pages 환경에서 실행 중인지 확인해 주세요.');
+    // 5. XML DOM 노드 생성 및 안전 조작 헬퍼
+    function createEl(doc, ns, prefix, tagName, attrs = {}, children = []) {
+      const node = doc.createElementNS(ns, `${prefix}:${tagName}`);
+      for (const [k, v] of Object.entries(attrs)) {
+        node.setAttribute(k, String(v));
+      }
+      children.forEach(child => {
+        if (typeof child === 'string') {
+          node.appendChild(doc.createTextNode(child));
+        } else if (child) {
+          node.appendChild(child);
         }
+      });
+      return node;
+    }
+
+    const createHpEl = (doc, tag, attrs, children) => createEl(doc, HP_NS, 'hp', tag, attrs, children);
+
+    function removeDirectLineSeg(paraNode) {
+      if (!paraNode) return;
+      Array.from(paraNode.childNodes).forEach(child => {
+        if (child.nodeName === 'hp:linesegarray') {
+          paraNode.removeChild(child);
+        }
+      });
+    }
+
+    // header.xml에 폰트(제목: 굴림체 100%/0%, 본문: 돋움 95%/-5%), 본문 '양쪽 정렬'(JUSTIFY), '어절'(BREAK_WORD) 설정
+    function injectCustomStyles(headerDoc) {
+      // 1) 폰트 등록 헬퍼 ("굴림체", "돋움")
+      const registerFontFace = (faceName) => {
+        const langFontIds = {};
+        const fontfaces = Array.from(headerDoc.getElementsByTagNameNS(HH_NS, 'fontface'));
+        fontfaces.forEach(ff => {
+          const lang = ff.getAttribute('lang');
+          const fonts = Array.from(ff.getElementsByTagNameNS(HH_NS, 'font'));
+          let found = fonts.find(f => f.getAttribute('face') === faceName);
+          if (found) {
+            langFontIds[lang] = found.getAttribute('id');
+          } else {
+            let maxFontId = -1;
+            fonts.forEach(f => {
+              const id = parseInt(f.getAttribute('id') || '0', 10);
+              if (id > maxFontId) maxFontId = id;
+            });
+            const newFontId = String(maxFontId + 1);
+            const baseFont = fonts[0].cloneNode(true);
+            baseFont.setAttribute('id', newFontId);
+            baseFont.setAttribute('face', faceName);
+            baseFont.setAttribute('type', 'TTF');
+            ff.appendChild(baseFont);
+            ff.setAttribute('fontCnt', String(ff.getElementsByTagNameNS(HH_NS, 'font').length));
+            langFontIds[lang] = newFontId;
+          }
+        });
+        return langFontIds;
+      };
+
+      const gulimCheFontIds = registerFontFace('굴림체');
+      const dotumFontIds = registerFontFace('돋움');
+
+      // 2) charPr 생성 헬퍼
+      const charProps = headerDoc.getElementsByTagNameNS(HH_NS, 'charProperties')[0];
+      const existingChars = Array.from(charProps.getElementsByTagNameNS(HH_NS, 'charPr'));
+      let maxCharId = 0;
+      existingChars.forEach(cp => {
+        const id = parseInt(cp.getAttribute('id') || '0', 10);
+        if (id > maxCharId) maxCharId = id;
+      });
+
+      const createCustomCharPr = (fontIdsMap, heightVal, isBold, ratioVal = 95, spacingVal = -5) => {
+        maxCharId += 1;
+        const newId = String(maxCharId);
+        const cp = existingChars[0].cloneNode(true);
+        cp.setAttribute('id', newId);
+        cp.setAttribute('height', String(heightVal));
+        cp.setAttribute('textColor', '#000000');
+
+        const fontRef = cp.getElementsByTagNameNS(HH_NS, 'fontRef')[0];
+        if (fontRef) {
+          ['hangul', 'latin', 'hanja', 'japanese', 'other', 'symbol', 'user'].forEach(k => {
+            const upper = k.toUpperCase();
+            if (fontIdsMap[upper]) fontRef.setAttribute(k, fontIdsMap[upper]);
+          });
+        }
+
+        const ratio = cp.getElementsByTagNameNS(HH_NS, 'ratio')[0];
+        if (ratio) {
+          ['hangul', 'latin', 'hanja', 'japanese', 'other', 'symbol', 'user'].forEach(k => ratio.setAttribute(k, String(ratioVal)));
+        }
+
+        const spacing = cp.getElementsByTagNameNS(HH_NS, 'spacing')[0];
+        if (spacing) {
+          ['hangul', 'latin', 'hanja', 'japanese', 'other', 'symbol', 'user'].forEach(k => spacing.setAttribute(k, String(spacingVal)));
+        }
+
+        const oldBold = cp.getElementsByTagNameNS(HH_NS, 'bold')[0];
+        if (isBold && !oldBold) {
+          const boldEl = createEl(headerDoc, HH_NS, 'hh', 'bold');
+          const italicEl = cp.getElementsByTagNameNS(HH_NS, 'italic')[0];
+          const underlineEl = cp.getElementsByTagNameNS(HH_NS, 'underline')[0];
+          cp.insertBefore(boldEl, italicEl || underlineEl || null);
+        } else if (!isBold && oldBold && oldBold.parentNode) {
+          oldBold.parentNode.removeChild(oldBold);
+        }
+
+        charProps.appendChild(cp);
+        return newId;
+      };
+
+      const titleCharId = createCustomCharPr(gulimCheFontIds, 1400, false, 100, 0);   // 제목: 굴림체 14pt 보통, 장평 100%, 자간 0%
+      const bodyNormalCharId = createCustomCharPr(dotumFontIds, 1200, false, 95, -5);  // 본문: 돋움 12pt 일반, 장평 95%, 자간 -5%
+      const bodyBoldCharId = createCustomCharPr(dotumFontIds, 1200, true, 95, -5);     // 본문강조: 돋움 12pt 진하게, 장평 95%, 자간 -5%
+      const tblNormalCharId = createCustomCharPr(dotumFontIds, 1000, false, 95, -5);   // 표내용: 돋움 10pt 일반
+      const tblBoldCharId = createCustomCharPr(dotumFontIds, 1000, true, 95, -5);      // 표헤더: 돋움 10pt 진하게
+      const unitCharId = createCustomCharPr(dotumFontIds, 900, false, 95, -5);         // 표단위: 돋움 9pt 일반
+      charProps.setAttribute('itemCnt', String(charProps.getElementsByTagNameNS(HH_NS, 'charPr').length));
+
+      // 3) 문단 스타일(paraPr) 설정: 본문 '양쪽 정렬'(JUSTIFY) + 한글 '어절' 단위 줄 나눔(BREAK_WORD)
+      const paraProps = headerDoc.getElementsByTagNameNS(HH_NS, 'paraProperties')[0];
+      const existingParas = Array.from(paraProps.getElementsByTagNameNS(HH_NS, 'paraPr'));
+      let maxParaId = 0;
+
+      const applyEojeolBreak = (ppNode) => {
+        const bsList = Array.from(ppNode.getElementsByTagNameNS(HH_NS, 'breakSetting'));
+        if (bsList.length > 0) {
+          bsList.forEach(bs => {
+            bs.setAttribute('breakLatinWord', 'KEEP_WORD');
+            bs.setAttribute('breakNonLatinWord', 'BREAK_WORD');
+            bs.setAttribute('lineWrap', 'BREAK');
+          });
+        } else {
+          const newBs = createEl(headerDoc, HH_NS, 'hh', 'breakSetting', {
+            breakLatinWord: 'KEEP_WORD',
+            breakNonLatinWord: 'BREAK_WORD',
+            widowOrphan: '0',
+            keepWithNext: '0',
+            keepLines: '0',
+            pageBreakBefore: '0',
+            lineWrap: 'BREAK'
+          });
+          ppNode.appendChild(newBs);
+        }
+      };
+
+      existingParas.forEach(pp => {
+        const id = parseInt(pp.getAttribute('id') || '0', 10);
+        if (id > maxParaId) maxParaId = id;
+        applyEojeolBreak(pp);
+      });
+
+      const titleBasePara = existingParas.find(pp => pp.getAttribute('id') === '25') || existingParas[0];
+      maxParaId += 1;
+      const titleParaId = String(maxParaId);
+      const titlePp = titleBasePara.cloneNode(true);
+      titlePp.setAttribute('id', titleParaId);
+      applyEojeolBreak(titlePp);
+      paraProps.appendChild(titlePp);
+
+      const createCleanParaPr = (alignType = 'JUSTIFY', lineSpacingVal = 160) => {
+        maxParaId += 1;
+        const newId = String(maxParaId);
+        const pp = existingParas[0].cloneNode(true);
+        pp.setAttribute('id', newId);
+
+        const align = pp.getElementsByTagNameNS(HH_NS, 'align')[0];
+        if (align) {
+          align.setAttribute('horizontal', alignType);
+          align.setAttribute('vertical', 'BASELINE');
+        }
+
+        applyEojeolBreak(pp);
+        Array.from(pp.getElementsByTagNameNS(HH_NS, 'breakSetting')).forEach(bs => {
+          bs.setAttribute('autoSpacing', '0');
+        });
+
+        Array.from(pp.getElementsByTagNameNS(HC_NS, 'left')).forEach(el => el.setAttribute('value', '0'));
+        Array.from(pp.getElementsByTagNameNS(HC_NS, 'right')).forEach(el => el.setAttribute('value', '0'));
+        Array.from(pp.getElementsByTagNameNS(HC_NS, 'intent')).forEach(el => el.setAttribute('value', '0'));
+
+        Array.from(pp.getElementsByTagNameNS(HH_NS, 'lineSpacing')).forEach(ls => {
+          ls.setAttribute('type', 'PERCENT');
+          ls.setAttribute('value', String(lineSpacingVal));
+        });
+
+        paraProps.appendChild(pp);
+        return newId;
+      };
+
+      const bodyParaId = createCleanParaPr('JUSTIFY', 160);
+      const centerParaId = createCleanParaPr('CENTER', 130);
+      const rightParaId = createCleanParaPr('RIGHT', 120);
+
+      paraProps.setAttribute('itemCnt', String(paraProps.getElementsByTagNameNS(HH_NS, 'paraPr').length));
+
+      // 4) 표 테두리 스타일
+      const borderFills = headerDoc.getElementsByTagNameNS(HH_NS, 'borderFills')[0];
+      const existingBfs = Array.from(borderFills.getElementsByTagNameNS(HH_NS, 'borderFill'));
+      let maxBfId = 0;
+      existingBfs.forEach(bf => {
+        const id = parseInt(bf.getAttribute('id') || '0', 10);
+        if (id > maxBfId) maxBfId = id;
+      });
+
+      const baseBf = existingBfs.find(bf => bf.getElementsByTagNameNS(HC_NS, 'fillBrush').length > 0) || existingBfs[0];
+
+      const cloneSolidBorderFill = (shadeHex) => {
+        maxBfId += 1;
+        const newId = String(maxBfId);
+        const bf = baseBf.cloneNode(true);
+        bf.setAttribute('id', newId);
+
+        ['leftBorder', 'rightBorder', 'topBorder', 'bottomBorder'].forEach(side => {
+          const bNode = bf.getElementsByTagNameNS(HH_NS, side)[0];
+          if (bNode) {
+            bNode.setAttribute('type', 'SOLID');
+            bNode.setAttribute('width', '0.12 mm');
+            bNode.setAttribute('color', '#000000');
+          }
+        });
+
+        const winBrush = bf.getElementsByTagNameNS(HC_NS, 'winBrush')[0];
+        if (winBrush) {
+          winBrush.setAttribute('faceColor', shadeHex || 'none');
+          winBrush.setAttribute('hatchColor', '#999999');
+          winBrush.setAttribute('alpha', '0');
+        }
+
+        borderFills.appendChild(bf);
+        return newId;
+      };
+
+      const bodyBorderId = cloneSolidBorderFill(null);
+      const headerBorderId = cloneSolidBorderFill('#EAEAEA');
+      borderFills.setAttribute('itemCnt', String(borderFills.getElementsByTagNameNS(HH_NS, 'borderFill').length));
+
+      return {
+        titleCharId,
+        bodyNormalCharId,
+        bodyBoldCharId,
+        tblNormalCharId,
+        tblBoldCharId,
+        unitCharId,
+        titleParaId,
+        bodyParaId,
+        centerParaId,
+        rightParaId,
+        bodyBorderId,
+        headerBorderId
+      };
+    }
+
+    function createRunNodes(doc, text, normalCharId, boldCharId) {
+      const parts = text.split(/(\*\*.*?\*\*)/g).filter(p => p.length > 0);
+      if (parts.length === 0) {
+        return [createHpEl(doc, 'run', { charPrIDRef: normalCharId }, [createHpEl(doc, 't', {}, [''])])];
+      }
+      return parts.map(part => {
+        if (part.startsWith('**') && part.endsWith('**')) {
+          const inner = part.slice(2, -2);
+          return createHpEl(doc, 'run', { charPrIDRef: boldCharId }, [createHpEl(doc, 't', {}, [inner])]);
+        }
+        return createHpEl(doc, 'run', { charPrIDRef: normalCharId }, [createHpEl(doc, 't', {}, [part])]);
+      });
+    }
+
+    function createTableBlockNodes(doc, tableBlock, styles) {
+      const resultNodes = [];
+
+      if (tableBlock.unit) {
+        const unitP = createHpEl(doc, 'p', {
+          id: 0, paraPrIDRef: styles.rightParaId, styleIDRef: 0, pageBreak: 0, columnBreak: 0, merged: 0
+        }, [
+          createHpEl(doc, 'run', { charPrIDRef: styles.unitCharId }, [createHpEl(doc, 't', {}, [tableBlock.unit])])
+        ]);
+        resultNodes.push(unitP);
       }
 
-      syncPreviewEdits();
+      const totalWidth = 43500;
+      const totalRows = tableBlock.rows.length;
+      const colCnt = tableBlock.rows[0].length;
+      const colWidth = Math.floor(totalWidth / colCnt);
+      const tblId = Math.floor(1000000000 + Math.random() * 900000000);
+
+      const trNodes = tableBlock.rows.map((row, rIdx) => {
+        const isHeader = (rIdx === 0);
+        const defaultCharRef = isHeader ? styles.tblBoldCharId : styles.tblNormalCharId;
+        const cellBorderId = isHeader ? styles.headerBorderId : styles.bodyBorderId;
+
+        const tcNodes = row.map((cellText, cIdx) => {
+          const cellP = createHpEl(doc, 'p', { id: 0, paraPrIDRef: styles.centerParaId, styleIDRef: 0, pageBreak: 0, columnBreak: 0, merged: 0 },
+            createRunNodes(doc, cellText, defaultCharRef, styles.tblBoldCharId)
+          );
+          const subList = createHpEl(doc, 'subList', {
+            id: '', textDirection: 'HORIZONTAL', lineWrap: 'BREAK', vertAlign: 'CENTER',
+            linkListIDRef: 0, linkListNextIDRef: 0, textWidth: 0, textHeight: 0, hasTextRef: 0, hasNumRef: 0
+          }, [cellP]);
+
+          return createHpEl(doc, 'tc', {
+            name: '', header: isHeader ? 1 : 0, hasMargin: 0, protect: 0, editable: 0, dirty: 0, borderFillIDRef: cellBorderId
+          }, [
+            subList,
+            createHpEl(doc, 'cellAddr', { colAddr: cIdx, rowAddr: rIdx }),
+            createHpEl(doc, 'cellSpan', { colSpan: 1, rowSpan: 1 }),
+            createHpEl(doc, 'cellSz', { width: colWidth, height: 1500 }),
+            createHpEl(doc, 'cellMargin', { left: 200, right: 200, top: 120, bottom: 120 })
+          ]);
+        });
+
+        return createHpEl(doc, 'tr', {}, tcNodes);
+      });
+
+      const tblNode = createHpEl(doc, 'tbl', {
+        id: tblId, zOrder: 5, numberingType: 'TABLE', textWrap: 'TOP_AND_BOTTOM', textFlow: 'BOTH_SIDES',
+        lock: 0, dropcapstyle: 'None', pageBreak: 'CELL', repeatHeader: 1, rowCnt: totalRows, colCnt: colCnt,
+        cellSpacing: 0, borderFillIDRef: styles.bodyBorderId, noAdjust: 0
+      }, [
+        createHpEl(doc, 'sz', { width: totalWidth, widthRelTo: 'ABSOLUTE', height: totalRows * 1500, heightRelTo: 'ABSOLUTE', protect: 0 }),
+        createHpEl(doc, 'pos', { treatAsChar: 1, affectLSpacing: 0, flowWithText: 1, allowOverlap: 0, holdAnchorAndSO: 0, vertRelTo: 'PARA', horzRelTo: 'PARA', vertAlign: 'TOP', horzAlign: 'LEFT', vertOffset: 0, horzOffset: 0 }),
+        createHpEl(doc, 'outMargin', { left: 140, right: 140, top: 60, bottom: 140 }),
+        createHpEl(doc, 'inMargin', { left: 200, right: 200, top: 120, bottom: 120 }),
+        ...trNodes
+      ]);
+
+      const runNode = createHpEl(doc, 'run', { charPrIDRef: styles.bodyNormalCharId }, [
+        createHpEl(doc, 't', {}, ['     ']),
+        tblNode,
+        createHpEl(doc, 't', {}, [''])
+      ]);
+
+      resultNodes.push(createHpEl(doc, 'p', { id: 0, paraPrIDRef: styles.bodyParaId, styleIDRef: 0, pageBreak: 0, columnBreak: 0, merged: 0 }, [runNode]));
+      return resultNodes;
+    }
+
+    // 6. 최종 HWPX 생성
+    async function generateHWPX() {
+      if (!templateBuffer) {
+        alert('먼저 좌측에서 HWPX 템플릿 파일을 등록해 주세요.');
+        return;
+      }
+
+      const raw = document.getElementById('mdEditor').value;
+      const parsed = parseMarkdownDoc(raw);
+      const shouldRemoveBottom = document.getElementById('removeBottomTable').checked;
 
       try {
-        const zip = await JSZip.loadAsync(templateArrayBuffer);
-        let sectionXml = await zip.file('Contents/section0.xml').async('string');
+        const zip = await JSZip.loadAsync(templateBuffer);
+        const parser = new DOMParser();
+        const serializer = new XMLSerializer();
 
-        const fullTitle = parsedBlocks.projectName
-          ? `[${parsedBlocks.projectName}] ${parsedBlocks.title}`
-          : parsedBlocks.title;
+        // A. header.xml 스타일 주입
+        const headerStr = await zip.file('Contents/header.xml').async('string');
+        const headerDoc = parser.parseFromString(headerStr, 'application/xml');
+        const styles = injectCustomStyles(headerDoc);
+        let newHeaderStr = serializer.serializeToString(headerDoc);
+        if (!newHeaderStr.startsWith('<?xml')) {
+          newHeaderStr = '<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>' + newHeaderStr;
+        }
+        zip.file('Contents/header.xml', newHeaderStr);
 
-        sectionXml = sectionXml.replace(
-          /(<hp:tc name="결재제목"[\s\S]*?<hp:p[^>]*>)[\s\S]*?(<\/hp:p>)/,
-          `$1<hp:run charPrIDRef="22"><hp:t>${escapeXml(fullTitle)}</hp:t></hp:run>$2`
-        );
+        // B. section0.xml 파싱 및 치환
+        const xmlStr = await zip.file('Contents/section0.xml').async('string');
+        const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
+        if (xmlDoc.querySelector('parsererror')) throw new Error('템플릿 XML 파싱 오류');
 
-        const receiverText = document.getElementById('prevReceiver').textContent.trim() || '내부결재';
-        const viaText = document.getElementById('prevVia').textContent.trim();
+        const tNodes = Array.from(xmlDoc.getElementsByTagName('hp:t'));
 
-        sectionXml = sectionXml.replace(
-          /(<hp:tc name="수신"[\s\S]*?<hp:t>)[\s\S]*?(<\/hp:t>)/,
-          `$1${escapeXml(receiverText)}$2`
-        );
-        if (viaText) {
-          sectionXml = sectionXml.replace(
-            /(<hp:tc name="경유"[\s\S]*?<hp:p[^>]*>)[\s\S]*?(<\/hp:p>)/,
-            `$1<hp:run charPrIDRef="13"><hp:t>${escapeXml(viaText)}</hp:t></hp:run>$2`
-          );
+        // 1) {{TITLE}} 치환: 굴림체 14pt 보통 (장평 100%, 자간 0%)
+        const titleTNode = tNodes.find(n => n.textContent.includes('{{TITLE}}'));
+        if (titleTNode) {
+          const titleRun = titleTNode.parentNode;
+          const titlePara = titleRun.parentNode;
+          const titleSubList = titlePara.parentNode;
+
+          if (titleSubList && titleSubList.nodeName === 'hp:subList') {
+            titleSubList.setAttribute('lineWrap', 'BREAK');
+          }
+
+          removeDirectLineSeg(titlePara);
+          titlePara.setAttribute('paraPrIDRef', styles.titleParaId);
+          titlePara.setAttribute('styleIDRef', '0');
+
+          titleTNode.textContent = parsed.title;
+          titleRun.setAttribute('charPrIDRef', styles.titleCharId);
         }
 
-        const newBodyXml = buildHwpxBodyXml(parsedBlocks);
-        const fieldBeginRegex = /(<hp:fieldBegin[^>]*name="본문"[\s\S]*?<\/hp:ctrl><\/hp:run>)[\s\S]*?(<hp:p[^>]*><hp:run[^>]*><hp:ctrl><hp:fieldEnd)/;
-        
-        if (fieldBeginRegex.test(sectionXml)) {
-          sectionXml = sectionXml.replace(fieldBeginRegex, `$1</hp:p>${newBodyXml}$2`);
-        } else {
-          return alert('서식 XML의 본문 필드 구조를 찾지 못했습니다.');
+        // 2) {{BODY_CONTENT}} 치환: 양쪽 정렬, 마크다운 공백 유지
+        const bodyTNode = Array.from(xmlDoc.getElementsByTagName('hp:t')).find(n => n.textContent.includes('{{BODY_CONTENT}}'));
+        if (bodyTNode) {
+          const targetRun = bodyTNode.parentNode;
+          const firstPara = targetRun.parentNode;
+          const secRoot = firstPara.parentNode;
+          const anchorNext = firstPara.nextSibling;
+
+          removeDirectLineSeg(firstPara);
+
+          if (parsed.blocks.length === 0) {
+            bodyTNode.textContent = '';
+          } else {
+            const firstBlock = parsed.blocks[0];
+            let extraBlocks = [];
+
+            if (firstBlock.type === 'table') {
+              bodyTNode.textContent = '';
+              extraBlocks = parsed.blocks;
+            } else {
+              firstPara.setAttribute('paraPrIDRef', styles.bodyParaId);
+              const lineText = ' '.repeat(firstBlock.indent) + firstBlock.text;
+              const firstRuns = createRunNodes(xmlDoc, lineText, styles.bodyNormalCharId, styles.bodyBoldCharId);
+              firstRuns.forEach(r => firstPara.insertBefore(r, targetRun));
+              firstPara.removeChild(targetRun);
+              extraBlocks = parsed.blocks.slice(1);
+            }
+
+            extraBlocks.forEach(block => {
+              if (block.type === 'table') {
+                const tblNodes = createTableBlockNodes(xmlDoc, block, styles);
+                tblNodes.forEach(n => secRoot.insertBefore(n, anchorNext));
+              } else {
+                const lineText = ' '.repeat(block.indent) + block.text;
+                const runs = createRunNodes(xmlDoc, lineText, styles.bodyNormalCharId, styles.bodyBoldCharId);
+                const newP = createHpEl(xmlDoc, 'p', {
+                  id: 0, paraPrIDRef: styles.bodyParaId, styleIDRef: 0, pageBreak: 0, columnBreak: 0, merged: 0
+                }, runs);
+                secRoot.insertBefore(newP, anchorNext);
+              }
+            });
+          }
         }
 
-        zip.file('Contents/section0.xml', sectionXml);
-        const blob = await zip.generateAsync({
+        // 3) {{ATTACHMENTS}} 치환: 양쪽 정렬, 첫 줄 공백/들여쓰기 없이 시작
+        const attachTNode = Array.from(xmlDoc.getElementsByTagName('hp:t')).find(n => n.textContent.includes('{{ATTACHMENTS}}'));
+        if (attachTNode) {
+          const attachRun = attachTNode.parentNode;
+          const attachPara = attachRun.parentNode;
+          const secRoot = attachPara.parentNode;
+
+          removeDirectLineSeg(attachPara);
+
+          if (parsed.attachments.length === 0) {
+            secRoot.removeChild(attachPara);
+          } else {
+            attachPara.setAttribute('paraPrIDRef', styles.bodyParaId);
+            attachRun.setAttribute('charPrIDRef', styles.bodyNormalCharId);
+            attachTNode.textContent = '붙임  ' + parsed.attachments[0];
+            const anchorNext = attachPara.nextSibling;
+
+            parsed.attachments.slice(1).forEach(att => {
+              const extraRun = createHpEl(xmlDoc, 'run', { charPrIDRef: styles.bodyNormalCharId }, [
+                createHpEl(xmlDoc, 't', {}, ['      ' + att])
+              ]);
+              const extraP = createHpEl(xmlDoc, 'p', {
+                id: 0, paraPrIDRef: styles.bodyParaId, styleIDRef: 0, pageBreak: 0, columnBreak: 0, merged: 0
+              }, [extraRun]);
+              secRoot.insertBefore(extraP, anchorNext);
+            });
+          }
+        }
+
+        // 4) 하단 결재란 표 자동 제거
+        if (shouldRemoveBottom) {
+          const allTables = Array.from(xmlDoc.getElementsByTagName('hp:tbl'));
+          const bottomTbl = allTables.find(tbl => tbl.getAttribute('id') === '1349199001');
+          if (bottomTbl && bottomTbl.parentNode) {
+            bottomTbl.parentNode.removeChild(bottomTbl);
+          }
+        }
+
+        let newXmlStr = serializer.serializeToString(xmlDoc);
+        if (!newXmlStr.startsWith('<?xml')) {
+          newXmlStr = '<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>' + newXmlStr;
+        }
+        zip.file('Contents/section0.xml', newXmlStr);
+
+        if (zip.file('mimetype')) {
+          const mimeText = await zip.file('mimetype').async('string');
+          zip.file('mimetype', mimeText, { compression: 'STORE' });
+        }
+
+        const outBlob = await zip.generateAsync({
           type: 'blob',
           mimeType: 'application/hwp+zip'
         });
 
-        const safeFileName = (fullTitle || '기안문').replace(/[\\/:*?"<>|]/g, '_');
+        const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+        const safeTitle = parsed.title.replace(/[\\/:*?"<>|]/g, '_').slice(0, 40);
+        const downloadName = `${today}_${safeTitle}.hwpx`;
+
         const link = document.createElement('a');
-        link.href = URL.createObjectURL(blob);
-        link.download = `${safeFileName}.hwpx`;
+        link.href = URL.createObjectURL(outBlob);
+        link.download = downloadName;
         link.click();
+        URL.revokeObjectURL(link.href);
 
       } catch (err) {
+        alert('HWPX 생성 중 오류가 발생했습니다: ' + err.message);
         console.error(err);
-        alert('HWPX 변환 중 오류: ' + err.message);
       }
-    });
+    }
+
+    // 7. AI 프롬프트 복사 & 샘플 데이터 로드
+    function copyAIPrompt() {
+      const promptText = `방금 논의한 내용을 바탕으로 국립대학교 공문서 자동 변환기용 마크다운(.md) 초안을 작성해 줘. 반드시 아래 규칙을 지켜줘:
+1. 최상단에 --- 로 감싼 YAML 헤더에 '제목'(줄바꿈 엔터 없이 한 줄로 작성)과 '붙임'(리스트 형태, 마지막 항목 끝에 '  끝.' 표기, 붙임이 없으면 '없음')만 작성할 것.
+2. 본문은 '1. 관련'부터 시작하고 계층별 들여쓰기(1. /   가. /     1) /     -)를 정확히 맞출 것.
+3. 강조할 핵심 문구나 금액은 **굵게**로 감쌀 것.
+4. 표가 필요하면 표 바로 윗줄에 [단위: 건] 형태로 단위를 적고, 마크다운 표(| 항목 | 내용 |)로 작성할 것.`;
+
+      navigator.clipboard.writeText(promptText).then(() => {
+        alert('AI 공문 생성용 프롬프트가 클립보드에 복사되었습니다!\n채팅창에 붙여넣어 마크다운 초안을 받아보세요.');
+      });
+    }
+
+    function loadSampleMd() {
+      document.getElementById('mdEditor').value = `---
+제목: OOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO
+붙임:
+  - 1. OOOOOOOOOOOO 1부.
+  - 2. OOOOOOOOOOOO 1부.
+  - 3. OOOOOOOOOOOO 1부.  끝.
+---
+
+1. OOOO
+  가. OOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO
+  나. OOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO
+2. OOOOOOOOOOOOOOOOOOOOOOOOO **OOOOOOOOOOOO** OOOOOOOOO **OOOOOOOOOOOO** OOOOO.
+  가. OOOOOOOOOOOOOOOOOOOOOOOOOOOO
+
+[단위: O]
+| OOO | OOO | OOO | OOO | OOO | OOO |
+| :--- | :---: | :---: | :---: | :---: | :--- |
+| OOO | O | O | O | O | |
+| OOO | O | O | O | O | OOOOO |
+| **OOO** | **O** | **O** | **O** | **O** | |
+
+      *OOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO **OOOOOOOO**
+  나. OOOOOOOOOOOO
+    - OOOOOOOOOOOOOOOOOOOOOOOO
+    - OOOOOOOOOOOOOOOOOOOOOOOO
+  다. OOOOOOOO
+    - OOOOOOOOOOOOOOOOOOOOOOOO
+    - OOOOOOOOOOOOOOOOOOOOOOOO`;
+      updatePreview();
+    }
   </script>
 </body>
 </html>
