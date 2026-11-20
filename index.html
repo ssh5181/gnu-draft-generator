@@ -104,7 +104,6 @@
     async function loadDefaultTemplate() {
       const badge = document.getElementById('templateBadge');
       try {
-        // 캐시 방지를 위해 타임스탬프 쿼리 추가
         const response = await fetch(`./template.hwpx?t=${Date.now()}`);
         if (!response.ok) {
           throw new Error(`HTTP ${response.status}`);
@@ -148,7 +147,7 @@
       }
     }
 
-    // 2. 마크다운 파일 읽기 및 파싱
+    // 2. 마크다운 파일 읽기 및 정제 파싱
     function handleMdUpload(e) {
       const file = e.target.files[0];
       if (!file) return;
@@ -160,11 +159,19 @@
       reader.readAsText(file, 'UTF-8');
     }
 
+    // 마크다운 잔여 특수기호(&nbsp;, 역슬래시 이스케이프 등) 정제
+    function cleanMarkdownArtifacts(text) {
+      return text
+        .replace(/&nbsp;/gi, ' ')
+        .replace(/\\([().\-*#\[\]_~`>+|])/g, '$1');
+    }
+
     function parseMarkdownDoc(rawText) {
       let titleParts = [];
       let attachments = [];
-      let bodyText = rawText.trim();
+      let bodyText = cleanMarkdownArtifacts(rawText).trim();
 
+      // 1) --- 로 감싼 YAML 헤더가 있는 경우 추출
       const fmMatch = bodyText.match(/^---\s*\r?\n([\s\S]*?)\r?\n---\s*(?:\r?\n([\s\S]*))?$/);
       if (fmMatch) {
         const metaLines = fmMatch[1].split(/\r?\n/);
@@ -174,13 +181,13 @@
           const trimLine = line.trim();
           if (!trimLine) return;
 
-          if (trimLine.startsWith('제목:')) {
+          if (/^(?:[*#\-]\s*)?\*{0,2}제목\*{0,2}\s*:/.test(trimLine)) {
             currentKey = 'title';
-            const val = trimLine.replace(/^제목:\s*/, '').replace(/^["']|["']$/g, '').replace(/\\n/g, ' ').trim();
+            const val = trimLine.replace(/^(?:[*#\-]\s*)?\*{0,2}제목\*{0,2}\s*:\s*/, '').replace(/^["']|["']$/g, '').replace(/\\n/g, ' ').trim();
             if (val) titleParts.push(val);
-          } else if (trimLine.startsWith('붙임:')) {
+          } else if (/^(?:[*#\-]\s*)?\*{0,2}붙임\*{0,2}\s*:/.test(trimLine)) {
             currentKey = 'attach';
-            const inlineVal = trimLine.replace(/^붙임:\s*/, '').trim();
+            const inlineVal = trimLine.replace(/^(?:[*#\-]\s*)?\*{0,2}붙임\*{0,2}\s*:\s*/, '').trim();
             if (inlineVal && inlineVal !== '없음') {
               attachments.push(inlineVal);
             }
@@ -198,14 +205,46 @@
         bodyText = (fmMatch[2] || '').trim();
       }
 
+      // 2) --- 헤더가 없거나 제목이 아직 비어있는 경우, 본문 상단의 '제목:' / '* 제목:' / '수신:' / '(경유)' 자동 감지 및 정리
+      const rawLines = bodyText.split(/\r?\n/);
+      const filteredBodyLines = [];
+
+      for (let idx = 0; idx < rawLines.length; idx++) {
+        const line = rawLines[idx];
+        const trimLine = line.trim();
+
+        // 상단 메타 영역(첫 '1.' 항목이 나오기 전)에서 제목/수신/경유/기관명 헤더 처리
+        const isBeforeFirstItem = filteredBodyLines.every(l => !/^\d+\./.test(l.trim()));
+
+        if (isBeforeFirstItem && trimLine) {
+          // '* 제목: ...' 또는 '제목: ...' 또는 '# 제목: ...' 매칭
+          const titleLineMatch = trimLine.match(/^(?:[*#\-•]\s*)?\*{0,2}제목\*{0,2}\s*:\s*(.+)$/);
+          if (titleLineMatch) {
+            if (titleParts.length === 0) {
+              titleParts.push(titleLineMatch[1].replace(/\*\*/g, '').trim());
+            }
+            continue; // 본문에서는 제거
+          }
+
+          // '* 수신: ...', '* (경유)', '경상국립대학교(...)' 같은 불필요한 공문 상단 헤더 제거
+          if (/^(?:[*#\-•]\s*)?\*{0,2}수신\*{0,2}\s*:/.test(trimLine) ||
+              /^(?:[*#\-•]\s*)?\(?경유\)?\s*:?$/.test(trimLine) ||
+              /^경상국립대학교\s*\(.*\)$/.test(trimLine) ||
+              /^---+$/.test(trimLine)) {
+            continue;
+          }
+        }
+
+        filteredBodyLines.push(line);
+      }
+
       const title = titleParts.length > 0 ? titleParts.join(' ') : '제목 없음';
 
-      const lines = bodyText.split(/\r?\n/);
       const blocks = [];
       let i = 0;
 
-      while (i < lines.length) {
-        const line = lines[i];
+      while (i < filteredBodyLines.length) {
+        const line = filteredBodyLines[i];
         const trimmed = line.trim();
 
         if (!trimmed) {
@@ -221,8 +260,8 @@
           }
 
           const tableRows = [];
-          while (i < lines.length && lines[i].trim().startsWith('|') && lines[i].trim().endsWith('|')) {
-            const rowStr = lines[i].trim();
+          while (i < filteredBodyLines.length && filteredBodyLines[i].trim().startsWith('|') && filteredBodyLines[i].trim().endsWith('|')) {
+            const rowStr = filteredBodyLines[i].trim();
             if (!/^\|[\s\-:|]+\|$/.test(rowStr)) {
               const cells = rowStr.slice(1, -1).split('|').map(c => c.trim());
               tableRows.push(cells);
