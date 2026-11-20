@@ -159,7 +159,6 @@
       reader.readAsText(file, 'UTF-8');
     }
 
-    // 마크다운 잔여 특수기호(&nbsp;, 역슬래시 이스케이프 등) 정제
     function cleanMarkdownArtifacts(text) {
       return text
         .replace(/&nbsp;/gi, ' ')
@@ -181,13 +180,13 @@
           const trimLine = line.trim();
           if (!trimLine) return;
 
-          if (/^(?:[*#\-]\s*)?\*{0,2}제목\*{0,2}\s*:/.test(trimLine)) {
+          if (/^(?:[*#\-•]\s*)?\*{0,2}제목\*{0,2}\s*:/.test(trimLine)) {
             currentKey = 'title';
-            const val = trimLine.replace(/^(?:[*#\-]\s*)?\*{0,2}제목\*{0,2}\s*:\s*/, '').replace(/^["']|["']$/g, '').replace(/\\n/g, ' ').trim();
+            const val = trimLine.replace(/^(?:[*#\-•]\s*)?\*{0,2}제목\*{0,2}\s*:\s*/, '').replace(/^["']|["']$/g, '').replace(/\\n/g, ' ').trim();
             if (val) titleParts.push(val);
-          } else if (/^(?:[*#\-]\s*)?\*{0,2}붙임\*{0,2}\s*:/.test(trimLine)) {
+          } else if (/^(?:[*#\-•]\s*)?\*{0,2}붙임\*{0,2}\s*:/.test(trimLine)) {
             currentKey = 'attach';
-            const inlineVal = trimLine.replace(/^(?:[*#\-]\s*)?\*{0,2}붙임\*{0,2}\s*:\s*/, '').trim();
+            const inlineVal = trimLine.replace(/^(?:[*#\-•]\s*)?\*{0,2}붙임\*{0,2}\s*:\s*/, '').trim();
             if (inlineVal && inlineVal !== '없음') {
               attachments.push(inlineVal);
             }
@@ -205,37 +204,62 @@
         bodyText = (fmMatch[2] || '').trim();
       }
 
-      // 2) --- 헤더가 없거나 제목이 아직 비어있는 경우, 본문 상단의 '제목:' / '* 제목:' / '수신:' / '(경유)' 자동 감지 및 정리
+      // 2) 본문에서 '제목:' 추출 후, 반드시 "1."로 시작하는 줄부터 본문 인식 시작
       const rawLines = bodyText.split(/\r?\n/);
-      const filteredBodyLines = [];
+      let firstItemIdx = -1;
 
       for (let idx = 0; idx < rawLines.length; idx++) {
-        const line = rawLines[idx];
-        const trimLine = line.trim();
+        const trimLine = rawLines[idx].trim();
+        if (!trimLine) continue;
 
-        // 상단 메타 영역(첫 '1.' 항목이 나오기 전)에서 제목/수신/경유/기관명 헤더 처리
-        const isBeforeFirstItem = filteredBodyLines.every(l => !/^\d+\./.test(l.trim()));
-
-        if (isBeforeFirstItem && trimLine) {
-          // '* 제목: ...' 또는 '제목: ...' 또는 '# 제목: ...' 매칭
-          const titleLineMatch = trimLine.match(/^(?:[*#\-•]\s*)?\*{0,2}제목\*{0,2}\s*:\s*(.+)$/);
-          if (titleLineMatch) {
-            if (titleParts.length === 0) {
-              titleParts.push(titleLineMatch[1].replace(/\*\*/g, '').trim());
-            }
-            continue; // 본문에서는 제거
+        // "1." 항목이 나오기 전 영역에서 제목 추출
+        const titleLineMatch = trimLine.match(/^(?:[*#\-•]\s*)?\*{0,2}제목\*{0,2}\s*:\s*(.+)$/);
+        if (titleLineMatch) {
+          if (titleParts.length === 0) {
+            titleParts.push(titleLineMatch[1].replace(/\*\*/g, '').trim());
           }
-
-          // '* 수신: ...', '* (경유)', '경상국립대학교(...)' 같은 불필요한 공문 상단 헤더 제거
-          if (/^(?:[*#\-•]\s*)?\*{0,2}수신\*{0,2}\s*:/.test(trimLine) ||
-              /^(?:[*#\-•]\s*)?\(?경유\)?\s*:?$/.test(trimLine) ||
-              /^경상국립대학교\s*\(.*\)$/.test(trimLine) ||
-              /^---+$/.test(trimLine)) {
-            continue;
-          }
+          continue;
         }
 
-        filteredBodyLines.push(line);
+        // 본문 시작점: "1." (또는 "**1.**")로 시작하는 첫 번째 줄 탐색
+        if (/^\*{0,2}1\./.test(trimLine)) {
+          firstItemIdx = idx;
+          break;
+        }
+      }
+
+      // "1."이 있으면 그 이전(기관명, (경유) 등)은 모두 제외하고 "1."부터 슬라이싱
+      const activeLines = firstItemIdx >= 0 ? rawLines.slice(firstItemIdx) : rawLines;
+
+      // 3) 본문 하단에 '붙임'으로 시작하는 줄이 있으면 attachments 배열로 분리
+      const bodyOnlyLines = [];
+      let inBottomAttach = false;
+
+      for (let idx = 0; idx < activeLines.length; idx++) {
+        const line = activeLines[idx];
+        const trimLine = line.trim();
+
+        const attachMatch = trimLine.match(/^(?:[*#\-•]\s*)?\*{0,2}붙임\*{0,2}(?:\s*:\s*|\s+)(.+)$/);
+        if (attachMatch) {
+          inBottomAttach = true;
+          const val = attachMatch[1].replace(/\*\*/g, '').trim();
+          if (val && val !== '없음') {
+            attachments.push(val);
+          }
+          continue;
+        }
+
+        if (inBottomAttach) {
+          if (trimLine) {
+            const cleanAtt = trimLine.replace(/^-\s*/, '').replace(/\*\*/g, '').trim();
+            if (cleanAtt && cleanAtt !== '없음') {
+              attachments.push(cleanAtt);
+            }
+          }
+          continue;
+        }
+
+        bodyOnlyLines.push(line);
       }
 
       const title = titleParts.length > 0 ? titleParts.join(' ') : '제목 없음';
@@ -243,8 +267,8 @@
       const blocks = [];
       let i = 0;
 
-      while (i < filteredBodyLines.length) {
-        const line = filteredBodyLines[i];
+      while (i < bodyOnlyLines.length) {
+        const line = bodyOnlyLines[i];
         const trimmed = line.trim();
 
         if (!trimmed) {
@@ -260,8 +284,8 @@
           }
 
           const tableRows = [];
-          while (i < filteredBodyLines.length && filteredBodyLines[i].trim().startsWith('|') && filteredBodyLines[i].trim().endsWith('|')) {
-            const rowStr = filteredBodyLines[i].trim();
+          while (i < bodyOnlyLines.length && bodyOnlyLines[i].trim().startsWith('|') && bodyOnlyLines[i].trim().endsWith('|')) {
+            const rowStr = bodyOnlyLines[i].trim();
             if (!/^\|[\s\-:|]+\|$/.test(rowStr)) {
               const cells = rowStr.slice(1, -1).split('|').map(c => c.trim());
               tableRows.push(cells);
@@ -327,7 +351,7 @@
       html += `</div>`;
 
       if (parsed.attachments.length > 0) {
-        html += `<div class="border-t border-slate-200 pt-2.5 text-slate-700 whitespace-pre-wrap text-justify">`;
+        html += `<div class="pt-3 text-slate-700 whitespace-pre-wrap text-justify">`;
         parsed.attachments.forEach((att, idx) => {
           html += `<div>${idx === 0 ? '붙임  ' : '      '}${att}</div>`;
         });
@@ -365,7 +389,6 @@
       });
     }
 
-    // header.xml 스타일 주입: 제목(굴림체 14pt 100%/0%), 본문(돋움 12pt 95%/-5%), 양쪽정렬(JUSTIFY), 어절 줄나눔(BREAK_WORD)
     function injectCustomStyles(headerDoc) {
       const registerFontFace = (faceName) => {
         const langFontIds = {};
@@ -446,12 +469,12 @@
         return newId;
       };
 
-      const titleCharId = createCustomCharPr(gulimCheFontIds, 1400, false, 100, 0);   // 제목: 굴림체 14pt 보통, 장평 100%, 자간 0%
-      const bodyNormalCharId = createCustomCharPr(dotumFontIds, 1200, false, 95, -5);  // 본문: 돋움 12pt 일반, 장평 95%, 자간 -5%
-      const bodyBoldCharId = createCustomCharPr(dotumFontIds, 1200, true, 95, -5);     // 본문강조: 돋움 12pt 진하게, 장평 95%, 자간 -5%
-      const tblNormalCharId = createCustomCharPr(dotumFontIds, 1000, false, 95, -5);   // 표내용: 돋움 10pt 일반
-      const tblBoldCharId = createCustomCharPr(dotumFontIds, 1000, true, 95, -5);      // 표헤더: 돋움 10pt 진하게
-      const unitCharId = createCustomCharPr(dotumFontIds, 900, false, 95, -5);         // 표단위: 돋움 9pt 일반
+      const titleCharId = createCustomCharPr(gulimCheFontIds, 1400, false, 100, 0);
+      const bodyNormalCharId = createCustomCharPr(dotumFontIds, 1200, false, 95, -5);
+      const bodyBoldCharId = createCustomCharPr(dotumFontIds, 1200, true, 95, -5);
+      const tblNormalCharId = createCustomCharPr(dotumFontIds, 1000, false, 95, -5);
+      const tblBoldCharId = createCustomCharPr(dotumFontIds, 1000, true, 95, -5);
+      const unitCharId = createCustomCharPr(dotumFontIds, 900, false, 95, -5);
       charProps.setAttribute('itemCnt', String(charProps.getElementsByTagNameNS(HH_NS, 'charPr').length));
 
       const paraProps = headerDoc.getElementsByTagNameNS(HH_NS, 'paraProperties')[0];
@@ -720,7 +743,7 @@
           titleRun.setAttribute('charPrIDRef', styles.titleCharId);
         }
 
-        // 2) {{BODY_CONTENT}} 치환
+        // 2) {{BODY_CONTENT}} 치환 ("1."부터 시작하는 본문만 출력)
         const bodyTNode = Array.from(xmlDoc.getElementsByTagName('hp:t')).find(n => n.textContent.includes('{{BODY_CONTENT}}'));
         if (bodyTNode) {
           const targetRun = bodyTNode.parentNode;
@@ -764,7 +787,7 @@
           }
         }
 
-        // 3) {{ATTACHMENTS}} 치환
+        // 3) {{ATTACHMENTS}} 치환 (본문 끝과 한 줄 여백 유지 보장)
         const attachTNode = Array.from(xmlDoc.getElementsByTagName('hp:t')).find(n => n.textContent.includes('{{ATTACHMENTS}}'));
         if (attachTNode) {
           const attachRun = attachTNode.parentNode;
@@ -776,6 +799,18 @@
           if (parsed.attachments.length === 0) {
             secRoot.removeChild(attachPara);
           } else {
+            // attachPara 바로 앞에 빈 줄(여백 문단)이 있는지 확인하고 없으면 1줄 삽입
+            const prevEl = attachPara.previousElementSibling;
+            const hasEmptyLineBefore = prevEl && prevEl.nodeName === 'hp:p' && prevEl.textContent.trim() === '' && prevEl.getElementsByTagName('hp:tbl').length === 0;
+            if (!hasEmptyLineBefore) {
+              const spacerP = createHpEl(xmlDoc, 'p', {
+                id: 0, paraPrIDRef: styles.bodyParaId, styleIDRef: 0, pageBreak: 0, columnBreak: 0, merged: 0
+              }, [
+                createHpEl(xmlDoc, 'run', { charPrIDRef: styles.bodyNormalCharId }, [createHpEl(xmlDoc, 't', {}, [''])])
+              ]);
+              secRoot.insertBefore(spacerP, attachPara);
+            }
+
             attachPara.setAttribute('paraPrIDRef', styles.bodyParaId);
             attachRun.setAttribute('charPrIDRef', styles.bodyNormalCharId);
             attachTNode.textContent = '붙임  ' + parsed.attachments[0];
