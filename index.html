@@ -387,6 +387,51 @@
       return { title, attachments, blocks };
     }
 
+
+    // ── 내어쓰기(둘째 줄부터 들여쓰기) 계산 ──────────────────────────────
+    // 본문 글꼴(돋움 12pt, 장평 95%, 자간 -5%)로 줄 앞부분("  가. ")의 폭을 HWPUNIT으로 계산해
+    // 둘째 줄부터 그 위치에서 시작하도록 문단 내어쓰기 값으로 씁니다.
+    // 글자 폭 표와 반올림 규칙은 python-hwpx(Apache-2.0)의 form_fit/measure.py에서 옮겨 왔습니다.
+    const DOTUM_GLYPHS = "!\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~·…“”‘’「」『』〈〉《》※○●□■△▲◇◆☆★→←↑↓ㆍ×÷±°℃‰—–ⅠⅡⅢⅣⅤⅥⅦⅧⅨⅩⅪⅫⅰⅱⅲⅳⅴⅵⅶⅷⅸⅹⅺⅻ①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳⑴⑵⑶⑷⑸⑹⑺⑻⑼⑽⑾⑿⒀⒁⒂⒃⒄⒅⒆⒇";
+    const DOTUM_ADVANCES = [342,427,640,512,939,726,298,384,384,597,596,384,604,384,427,597,597,597,597,597,597,597,597,597,597,348,348,640,598,640,597,1024,683,696,738,742,644,614,768,740,264,496,672,554,828,714,768,658,768,684,654,597,742,616,914,618,616,618,512,981,512,640,512,340,597,614,572,618,572,352,612,574,234,234,522,236,939,582,614,616,618,328,528,320,568,486,742,490,492,494,512,512,512,810,340,1024,469,469,299,299,1024,1024,1024,1024,1024,1024,1024,1024,1024,1024,960,911,911,1024,936,1024,1024,1024,1024,1024,1024,768,768,1024,853,853,853,415,1024,1024,1024,512,1024,1024,1024,1024,1024,1024,1024,1024,1024,1024,0,0,1024,1024,1024,1024,1024,1024,1024,1024,1024,1024,0,0,1024,1024,1024,1024,1024,1024,1024,1024,1024,1024,1024,1024,1024,1024,1024,0,0,0,0,0,1024,1024,1024,1024,1024,1024,1024,1024,1024,1024,1024,1024,1024,1024,1024,0,0,0,0,0];
+    const BODY_FONT = { height: 1200, ratio: 95, spacing: -5 };
+
+    function dotumAdvance(ch, font = BODY_FONT) {
+      const em = Math.floor(font.height / 4);              // 한글은 1/1800인치(4 HWPUNIT) 단위로 배치
+      const roundSpacing = (adv) => {
+        const share = adv * font.spacing / 100;
+        const u = Math.floor(Math.abs(share) + 0.5);
+        return share >= 0 ? u : -u;
+      };
+      if (ch === ' ') {                                     // 빈칸은 글꼴과 무관하게 반각, 자간 미적용
+        return Math.floor(Math.floor(em / 2) * font.ratio / 100 + 0.5) * 4;
+      }
+      let units = 1024;                                     // 한글·전각 기호 기본 폭(1em)
+      const idx = DOTUM_GLYPHS.indexOf(ch);
+      if (idx >= 0 && DOTUM_ADVANCES[idx] > 0) units = DOTUM_ADVANCES[idx];
+      const adv = font.ratio === 100
+        ? Math.floor(units * em / 1024 + 0.5)
+        : Math.floor(units * em * font.ratio / (1024 * 100));
+      return (adv + roundSpacing(adv)) * 4;
+    }
+
+    function measureText(text) {
+      return Array.from(text).reduce((sum, ch) => sum + dotumAdvance(ch), 0);
+    }
+
+    // 항목 기호: 1. 가. 1) 가) (1) (가) ① ㉮ - · ○ ※ * 등
+    const ITEM_MARKER_RE = /^(?:\d{1,2}\.|[가-힣]\.|\d{1,2}\)|[가-힣]\)|\(\d{1,2}\)|\([가-힣]\)|[①-⑳]|[㉮-㉻]|[-–·•○●◦□■▪※*ㅇ])\s+/;
+
+    // 줄 텍스트(앞 공백 포함)에서 둘째 줄이 시작할 위치(HWPUNIT)를 구함
+    function hangingIndentOf(lineText, fixedPrefix = '') {
+      const plain = lineText.replace(/\*\*/g, '');
+      const lead = plain.match(/^\s*/)[0];
+      const rest = plain.slice(lead.length);
+      const marker = (rest.match(ITEM_MARKER_RE) || [''])[0];
+      const w = measureText(fixedPrefix + lead + marker);
+      return Math.min(w, 24000);
+    }
+
     // 3. 실시간 미리보기 렌더링
     function updatePreview() {
       const raw = document.getElementById('mdEditor').value;
@@ -408,7 +453,9 @@
       parsed.blocks.forEach(b => {
         if (b.type === 'line' || b.type === 'unit') {
           const spaces = ' '.repeat(b.indent);
-          html += `<div>${spaces}${formatBoldHtml(b.text)}</div>`;
+          // 출력 HWPX와 같은 내어쓰기를 미리보기에도 근사 적용 (1200 HWPUNIT = 1em)
+          const hangEm = (hangingIndentOf(spaces + b.text) / 1200).toFixed(2);
+          html += `<div style="padding-left:${hangEm}em;text-indent:-${hangEm}em">${spaces}${formatBoldHtml(b.text)}</div>`;
         } else if (b.type === 'table') {
           if (b.unit) html += `<div class="text-right text-[11px] text-slate-600 mt-2">${escapeHtml(b.unit)}</div>`;
           html += `<table class="w-full border-collapse border border-slate-400 text-[11px] mb-1">`;
@@ -625,8 +672,31 @@
       const bodyParaId = createCleanParaPr('JUSTIFY', 160);
       const centerParaId = createCleanParaPr('CENTER', 130);
       const rightParaId = createCleanParaPr('RIGHT', 120);
+      const bodyParaNode = Array.from(paraProps.getElementsByTagNameNS(HH_NS, 'paraPr')).find(pp => pp.getAttribute('id') === bodyParaId);
 
-      paraProps.setAttribute('itemCnt', String(paraProps.getElementsByTagNameNS(HH_NS, 'paraPr').length));
+      const updateParaCount = () => paraProps.setAttribute('itemCnt', String(paraProps.getElementsByTagNameNS(HH_NS, 'paraPr').length));
+      updateParaCount();
+
+      // 내어쓰기 폭별 본문 문단모양 (같은 폭은 재사용)
+      // 한글이 저장하는 방식대로 hp:case(HwpUnitChar)에는 W, hp:default에는 2W를 음수로 기록
+      const hangingParaCache = new Map();
+      const getHangingParaId = (width) => {
+        const w = Math.round(width / 4) * 4;
+        if (w <= 0) return bodyParaId;
+        if (hangingParaCache.has(w)) return hangingParaCache.get(w);
+        maxParaId += 1;
+        const newId = String(maxParaId);
+        const pp = bodyParaNode.cloneNode(true);
+        pp.setAttribute('id', newId);
+        Array.from(pp.getElementsByTagNameNS(HC_NS, 'intent')).forEach(el => {
+          const inCase = el.parentNode && el.parentNode.parentNode && el.parentNode.parentNode.localName === 'case';
+          el.setAttribute('value', String(-(inCase ? w : w * 2)));
+        });
+        paraProps.appendChild(pp);
+        updateParaCount();
+        hangingParaCache.set(w, newId);
+        return newId;
+      };
 
       const borderFills = headerDoc.getElementsByTagNameNS(HH_NS, 'borderFills')[0];
       const existingBfs = Array.from(borderFills.getElementsByTagNameNS(HH_NS, 'borderFill'));
@@ -679,6 +749,7 @@
         bodyParaId,
         centerParaId,
         rightParaId,
+        getHangingParaId,
         bodyBorderId,
         headerBorderId
       };
@@ -787,11 +858,7 @@
         const headerStr = await zip.file('Contents/header.xml').async('string');
         const headerDoc = parser.parseFromString(headerStr, 'application/xml');
         const styles = injectCustomStyles(headerDoc);
-        let newHeaderStr = serializer.serializeToString(headerDoc);
-        if (!newHeaderStr.startsWith('<?xml')) {
-          newHeaderStr = '<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>' + newHeaderStr;
-        }
-        zip.file('Contents/header.xml', newHeaderStr);
+        // header.xml은 본문 조립 중 내어쓰기 문단모양이 추가되므로 맨 마지막에 저장
 
         // B. section0.xml 파싱 및 치환
         const xmlStr = await zip.file('Contents/section0.xml').async('string');
@@ -842,8 +909,8 @@
               bodyTNode.textContent = '';
               extraBlocks = parsed.blocks;
             } else {
-              firstPara.setAttribute('paraPrIDRef', styles.bodyParaId);
               const lineText = ' '.repeat(firstBlock.indent) + firstBlock.text;
+              firstPara.setAttribute('paraPrIDRef', styles.getHangingParaId(hangingIndentOf(lineText)));
               const firstRuns = createRunNodes(xmlDoc, lineText, styles.bodyNormalCharId, styles.bodyBoldCharId);
               firstRuns.forEach(r => firstPara.insertBefore(r, targetRun));
               firstPara.removeChild(targetRun);
@@ -858,7 +925,7 @@
                 const lineText = ' '.repeat(block.indent) + block.text;
                 const runs = createRunNodes(xmlDoc, lineText, styles.bodyNormalCharId, styles.bodyBoldCharId);
                 const newP = createHpEl(xmlDoc, 'p', {
-                  id: 0, paraPrIDRef: styles.bodyParaId, styleIDRef: 0, pageBreak: 0, columnBreak: 0, merged: 0
+                  id: 0, paraPrIDRef: styles.getHangingParaId(hangingIndentOf(lineText)), styleIDRef: 0, pageBreak: 0, columnBreak: 0, merged: 0
                 }, runs);
                 secRoot.insertBefore(newP, anchorNext);
               }
@@ -889,7 +956,7 @@
               secRoot.insertBefore(spacerP, attachPara);
             }
 
-            attachPara.setAttribute('paraPrIDRef', styles.bodyParaId);
+            attachPara.setAttribute('paraPrIDRef', styles.getHangingParaId(hangingIndentOf(parsed.attachments[0], '붙임  ')));
             attachRun.setAttribute('charPrIDRef', styles.bodyNormalCharId);
             attachTNode.textContent = '붙임  ' + parsed.attachments[0];
             const anchorNext = attachPara.nextSibling;
@@ -899,7 +966,7 @@
                 createHpEl(xmlDoc, 't', {}, ['      ' + att])
               ]);
               const extraP = createHpEl(xmlDoc, 'p', {
-                id: 0, paraPrIDRef: styles.bodyParaId, styleIDRef: 0, pageBreak: 0, columnBreak: 0, merged: 0
+                id: 0, paraPrIDRef: styles.getHangingParaId(hangingIndentOf('      ' + att)), styleIDRef: 0, pageBreak: 0, columnBreak: 0, merged: 0
               }, [extraRun]);
               secRoot.insertBefore(extraP, anchorNext);
             });
@@ -916,6 +983,12 @@
           newXmlStr = '<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>' + newXmlStr;
         }
         zip.file('Contents/section0.xml', newXmlStr);
+
+        let newHeaderStr = serializer.serializeToString(headerDoc);
+        if (!newHeaderStr.startsWith('<?xml')) {
+          newHeaderStr = '<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>' + newHeaderStr;
+        }
+        zip.file('Contents/header.xml', newHeaderStr);
 
         if (zip.file('mimetype')) {
           const mimeText = await zip.file('mimetype').async('string');
