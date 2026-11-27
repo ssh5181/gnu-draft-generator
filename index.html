@@ -9,7 +9,7 @@
   <style>
     @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
     body { font-family: 'Pretendard', sans-serif; }
-    .doc-preview { font-family: 'Dotum', '돋움', 'Malgun Gothic', sans-serif; line-height: 1.65; word-break: keep-all; }
+    .doc-preview { font-family: 'DotumChe', '돋움체', 'Dotum', '돋움', 'Malgun Gothic', sans-serif; line-height: 1.65; word-break: keep-all; }
   </style>
 </head>
 <body class="bg-slate-100 text-slate-800 h-screen flex flex-col overflow-hidden">
@@ -74,7 +74,7 @@
         class="flex-1 w-full p-5 text-xs font-mono leading-relaxed resize-none focus:outline-none text-slate-800 bg-white"></textarea>
 
       <div class="px-4 py-2.5 bg-slate-50 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-500">
-        <span>서식: 제목(굴림체 14pt, 100%/0%) · 본문(돋움 12pt, 95%/-5%, 양쪽정렬, 어절 줄나눔)</span>
+        <span>서식: 제목(굴림체 14pt, 100%/0%) · 본문(돋움체 12pt, 95%/-5%, 양쪽정렬, 어절 줄나눔)</span>
         <label class="flex items-center gap-1.5 cursor-pointer text-slate-700 font-medium">
           <input type="checkbox" id="removeBottomTable" checked class="rounded text-blue-600 focus:ring-blue-500" />
           <span id="removeBottomLabel">하단 결재란/시행정보 표 제거</span>
@@ -389,14 +389,13 @@
 
 
     // ── 내어쓰기(둘째 줄부터 들여쓰기) 계산 ──────────────────────────────
-    // 본문 글꼴(돋움 12pt, 장평 95%, 자간 -5%)로 줄 앞부분("  가. ")의 폭을 HWPUNIT으로 계산해
+    // 본문 글꼴(돋움체 12pt, 장평 95%, 자간 -5%)로 줄 앞부분("  가. ")의 폭을 HWPUNIT으로 계산해
     // 둘째 줄부터 그 위치에서 시작하도록 문단 내어쓰기 값으로 씁니다.
-    // 글자 폭 표와 반올림 규칙은 python-hwpx(Apache-2.0)의 form_fit/measure.py에서 옮겨 왔습니다.
-    const DOTUM_GLYPHS = "!\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~·…“”‘’「」『』〈〉《》※○●□■△▲◇◆☆★→←↑↓ㆍ×÷±°℃‰—–ⅠⅡⅢⅣⅤⅥⅦⅧⅨⅩⅪⅫⅰⅱⅲⅳⅴⅵⅶⅷⅸⅹⅺⅻ①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳⑴⑵⑶⑷⑸⑹⑺⑻⑼⑽⑾⑿⒀⒁⒂⒃⒄⒅⒆⒇";
-    const DOTUM_ADVANCES = [342,427,640,512,939,726,298,384,384,597,596,384,604,384,427,597,597,597,597,597,597,597,597,597,597,348,348,640,598,640,597,1024,683,696,738,742,644,614,768,740,264,496,672,554,828,714,768,658,768,684,654,597,742,616,914,618,616,618,512,981,512,640,512,340,597,614,572,618,572,352,612,574,234,234,522,236,939,582,614,616,618,328,528,320,568,486,742,490,492,494,512,512,512,810,340,1024,469,469,299,299,1024,1024,1024,1024,1024,1024,1024,1024,1024,1024,960,911,911,1024,936,1024,1024,1024,1024,1024,1024,768,768,1024,853,853,853,415,1024,1024,1024,512,1024,1024,1024,1024,1024,1024,1024,1024,1024,1024,0,0,1024,1024,1024,1024,1024,1024,1024,1024,1024,1024,0,0,1024,1024,1024,1024,1024,1024,1024,1024,1024,1024,1024,1024,1024,1024,1024,0,0,0,0,0,1024,1024,1024,1024,1024,1024,1024,1024,1024,1024,1024,1024,1024,1024,1024,0,0,0,0,0];
+    // 돋움체는 고정폭 글꼴이라 영문·숫자·ASCII 기호는 반각(512/1024em), 한글·전각 기호는 전각(1em)입니다.
+    // 반올림 규칙은 python-hwpx(Apache-2.0)의 form_fit/measure.py에서 옮겨 왔습니다.
     const BODY_FONT = { height: 1200, ratio: 95, spacing: -5 };
 
-    function dotumAdvance(ch, font = BODY_FONT) {
+    function dotumCheAdvance(ch, font = BODY_FONT) {
       const em = Math.floor(font.height / 4);              // 한글은 1/1800인치(4 HWPUNIT) 단위로 배치
       const roundSpacing = (adv) => {
         const share = adv * font.spacing / 100;
@@ -406,9 +405,8 @@
       if (ch === ' ') {                                     // 빈칸은 글꼴과 무관하게 반각, 자간 미적용
         return Math.floor(Math.floor(em / 2) * font.ratio / 100 + 0.5) * 4;
       }
-      let units = 1024;                                     // 한글·전각 기호 기본 폭(1em)
-      const idx = DOTUM_GLYPHS.indexOf(ch);
-      if (idx >= 0 && DOTUM_ADVANCES[idx] > 0) units = DOTUM_ADVANCES[idx];
+      const code = ch.codePointAt(0);
+      const units = (code >= 0x21 && code <= 0x7E) ? 512 : 1024;  // ASCII는 반각, 그 외(한글·전각 기호)는 전각
       const adv = font.ratio === 100
         ? Math.floor(units * em / 1024 + 0.5)
         : Math.floor(units * em * font.ratio / (1024 * 100));
@@ -416,7 +414,7 @@
     }
 
     function measureText(text) {
-      return Array.from(text).reduce((sum, ch) => sum + dotumAdvance(ch), 0);
+      return Array.from(text).reduce((sum, ch) => sum + dotumCheAdvance(ch), 0);
     }
 
     // 항목 기호: 1. 가. 1) 가) (1) (가) ① ㉮ - · ○ ※ * 등
@@ -541,7 +539,7 @@
       };
 
       const gulimCheFontIds = registerFontFace('굴림체');
-      const dotumFontIds = registerFontFace('돋움');
+      const dotumCheFontIds = registerFontFace('돋움체');
 
       const charProps = headerDoc.getElementsByTagNameNS(HH_NS, 'charProperties')[0];
       const existingChars = Array.from(charProps.getElementsByTagNameNS(HH_NS, 'charPr'));
@@ -592,11 +590,11 @@
       };
 
       const titleCharId = createCustomCharPr(gulimCheFontIds, 1400, false, 100, 0);
-      const bodyNormalCharId = createCustomCharPr(dotumFontIds, 1200, false, 95, -5);
-      const bodyBoldCharId = createCustomCharPr(dotumFontIds, 1200, true, 95, -5);
-      const tblNormalCharId = createCustomCharPr(dotumFontIds, 1000, false, 95, -5);
-      const tblBoldCharId = createCustomCharPr(dotumFontIds, 1000, true, 95, -5);
-      const unitCharId = createCustomCharPr(dotumFontIds, 900, false, 95, -5);
+      const bodyNormalCharId = createCustomCharPr(dotumCheFontIds, 1200, false, 95, -5);
+      const bodyBoldCharId = createCustomCharPr(dotumCheFontIds, 1200, true, 95, -5);
+      const tblNormalCharId = createCustomCharPr(dotumCheFontIds, 1000, false, 95, -5);
+      const tblBoldCharId = createCustomCharPr(dotumCheFontIds, 1000, true, 95, -5);
+      const unitCharId = createCustomCharPr(dotumCheFontIds, 900, false, 95, -5);
       charProps.setAttribute('itemCnt', String(charProps.getElementsByTagNameNS(HH_NS, 'charPr').length));
 
       const paraProps = headerDoc.getElementsByTagNameNS(HH_NS, 'paraProperties')[0];
